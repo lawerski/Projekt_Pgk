@@ -1,5 +1,7 @@
 extends Node
 
+@onready var question_manager = $QuestionManager
+
 enum GameState {
 	LOBBY,
 	ROUND_START,
@@ -28,7 +30,12 @@ func _handle_state_logic():
 		GameState.LOBBY:
 			print("Host oczekuje na połączenia...")
 		GameState.ROUND_START:
-			print("Start rundy: Wyświetlanie pytania ankietowego.")
+			print("Start rundy: Pobieranie pytania..")
+			if question_manager:
+				var q = question_manager.get_random_question()
+				if q:
+					print("Pytanie na tę runde: " + str(q["question"]))
+					#wyslanie pytania do UI feature
 		GameState.PLAYER_INPUT:
 			print("Oczekiwanie na input od graczy (smartfony).")
 		GameState.REVEAL:
@@ -50,9 +57,19 @@ func join_fake_player(name: String):
 	players[new_id] = name
 	print("Dołącza gracz: %s. Razem graczy: %d" % [name, players.size()])
 
+var chars = "abcdefghijklmnoprstuvwxyz"
+func generate_fake_name(letters, length):
+	var word: String
+	var n_char = len(letters)
+	
+	for i in range(length):
+		word += chars[randi() % n_char]
+	
+	return word
+	
 func _input(event):
 	if event.is_action_pressed("ui_accept"):
 		start_game()
 	
 	if event is InputEventKey and event.pressed and event.keycode == KEY_A:
-		join_fake_player("ni")
+		join_fake_player(generate_fake_name(chars, 4))

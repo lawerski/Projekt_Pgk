@@ -1,8 +1,12 @@
-[gd_scene load_steps=2 format=3 uid="uid://01w6f6nt85mm"]
+[gd_scene load_steps=3 format=3 uid="uid://01w6f6nt85mm"]
 
 [ext_resource type="Script" uid="uid://bw1exo26x68gx" path="res://GameManager.gd" id="1_glv2v"]
+[ext_resource type="Script" uid="uid://r55wkwd88nfr" path="res://QuestionManager.gd" id="2_uu6xs"]
 
 [node name="Main" type="Node2D"]
 
 [node name="GameManager" type="Node" parent="."]
 script = ExtResource("1_glv2v")
+
+[node name="QuestionManager" type="Node" parent="GameManager"]
+script = ExtResource("2_uu6xs")

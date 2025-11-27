@@ -1,0 +1,57 @@
+[
+	{
+		"id": 1,
+		"question": "Wymień owoc, który jest żółty",
+		"answers": [
+			{"text": "Banan", "points": 40},
+			{"text": "Cytryna", "points": 30},
+			{"text": "Gruszka", "points": 15},
+			{"text": "Melon", "points": 10},
+			{"text": "Ananas", "points": 5}
+		]
+	},
+	{
+		"id": 2,
+		"question": "Co znajdziemy w piórniku ucznia?",
+		"answers": [
+			{"text": "Długopis", "points": 35},
+			{"text": "Ołówek", "points": 25},
+			{"text": "Gumka", "points": 20},
+			{"text": "Linijka", "points": 15},
+			{"text": "Temperówka", "points": 5}
+		]
+	},
+	{
+		"id": 3,
+		"question": "Co robimy zaraz po przebudzeniu?",
+		"answers": [
+			{"text": "Myjemy zęby", "points": 30},
+			{"text": "Pijemy kawę", "points": 25},
+			{"text": "Przeciągamy się", "points": 20},
+			{"text": "Wyłączamy budzik", "points": 15},
+			{"text": "Bierzemy telefon", "points": 10}
+		]
+	},
+	{
+		"id": 4,
+		"question": "Wymień zwierzę, które ma rogi",
+		"answers": [
+			{"text": "Byk", "points": 35},
+			{"text": "Jeleń", "points": 30},
+			{"text": "Koza", "points": 20},
+			{"text": "Baran", "points": 10},
+			{"text": "Nosorożec", "points": 5}
+		]
+	},
+	{
+		"id": 5,
+		"question": "Czego nie lubimy robić w domu?",
+		"answers": [
+			{"text": "Sprzątać", "points": 45},
+			{"text": "Zmywać naczyń", "points": 30},
+			{"text": "Prasować", "points": 15},
+			{"text": "Wynosić śmieci", "points": 5},
+			{"text": "Odkurzać", "points": 5}
+		]
+	}
+]
