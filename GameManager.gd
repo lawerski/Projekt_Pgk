@@ -12,6 +12,8 @@ enum GameState {
 
 var current_state: GameState = GameState.LOBBY
 var players: Dictionary = {}
+var current_question_data: Dictionary = {}
+
 func _ready() -> void:
 	print(" GAME MANAGER START")
 	print("Stan początkowy: %s" % current_state)
@@ -32,9 +34,10 @@ func _handle_state_logic():
 		GameState.ROUND_START:
 			print("Start rundy: Pobieranie pytania..")
 			if question_manager:
-				var q = question_manager.get_random_question()
-				if q:
-					print("Pytanie na tę runde: " + str(q["question"]))
+				current_question_data = question_manager.get_random_question()
+				if current_question_data:
+					print("Pytanie: " + str(current_question_data["question"]))
+					change_state(GameState.PLAYER_INPUT)
 					#wyslanie pytania do UI feature
 		GameState.PLAYER_INPUT:
 			print("Oczekiwanie na input od graczy (smartfony).")
@@ -70,6 +73,19 @@ func generate_fake_name(letters, length):
 func _input(event):
 	if event.is_action_pressed("ui_accept"):
 		start_game()
+	
+	if event is InputEventKey and event.pressed and event.keycode == KEY_T:
+		if current_state == GameState.PLAYER_INPUT:
+			var test_input = "katomierz"
+			print("testuje input: " + test_input)
+			
+			var result = question_manager.check_answer(test_input, current_question_data)
+			
+			if result:
+				print("Trafienie! Punkty: " + str(result["points"]))
+				# feature - zmiana stanu gry na reveal
+			else:
+				print("Pudlo")
 	
 	if event is InputEventKey and event.pressed and event.keycode == KEY_A:
 		join_fake_player(generate_fake_name(chars, 4))
