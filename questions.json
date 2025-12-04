@@ -1,45 +1,172 @@
 [
 	{
 		"id": 1,
-		"question": "Runda 1: Wpisz A",
+		"question": "Wymień owoc, który ma jedną dużą pestkę.",
 		"answers": [
-			{"text": "A", "points": 100}
+			{
+				"text": "Śliwka",
+				"points": 35,
+				"synonyms": ["sliwka", "sliwki", "śliwki", "węgierka", "mirabelka"]
+			},
+			{
+				"text": "Brzoskwinia",
+				"points": 25,
+				"synonyms": ["brzoskwinie", "brzoskwinia", "nektarynka"]
+			},
+			{
+				"text": "Wiśnia",
+				"points": 15,
+				"synonyms": ["wisnia", "wisnie", "wiśnie"]
+			},
+			{
+				"text": "Czereśnia",
+				"points": 10,
+				"synonyms": ["czeresnia", "czeresnie", "czereśnie"]
+			},
+			{
+				"text": "Morela",
+				"points": 10,
+				"synonyms": ["morele", "morelka"]
+			},
+			{
+				"text": "Awokado",
+				"points": 5,
+				"synonyms": ["awocado", "avocado"]
+			}
 		]
 	},
 	{
 		"id": 2,
-		"question": "Runda 2: Wpisz B",
+		"question": "Co ma nogi, ale nie chodzi?",
 		"answers": [
-			{"text": "B", "points": 100}
+			{
+				"text": "Stół",
+				"points": 40,
+				"synonyms": ["stol", "stolik", "lawa", "ława"]
+			},
+			{
+				"text": "Krzesło",
+				"points": 25,
+				"synonyms": ["krzeslo", "fotel", "taboret", "siedzisko"]
+			},
+			{
+				"text": "Łóżko",
+				"points": 15,
+				"synonyms": ["lozko", "wyrko", "kanapa", "wersalka"]
+			},
+			{
+				"text": "Kieliszek",
+				"points": 10,
+				"synonyms": ["kielich", "szkło"]
+			},
+			{
+				"text": "Grzyb",
+				"points": 5,
+				"synonyms": ["grzyby", "borowik", "muchomor"]
+			},
+			{
+				"text": "Okulary",
+				"points": 5,
+				"synonyms": ["bryle", "oksy"]
+			}
 		]
 	},
 	{
 		"id": 3,
-		"question": "Runda 3: Wpisz C",
+		"question": "Czego nie może zabraknąć w rosole?",
 		"answers": [
-			{"text": "C", "points": 100}
+			{
+				"text": "Makaron",
+				"points": 35,
+				"synonyms": ["makaronu", "kluski", "klusek", "nitki"]
+			},
+			{
+				"text": "Kura",
+				"points": 25,
+				"synonyms": ["kurczak", "mieso", "mięso", "kurczaka"]
+			},
+			{
+				"text": "Marchewka",
+				"points": 15,
+				"synonyms": ["marchew", "marchewki"]
+			},
+			{
+				"text": "Pietruszka",
+				"points": 10,
+				"synonyms": ["natka", "zielenina"]
+			},
+			{
+				"text": "Woda",
+				"points": 10,
+				"synonyms": ["wywar", "bulion"]
+			},
+			{
+				"text": "Sól",
+				"points": 5,
+				"synonyms": ["przyprawy", "pieprz", "sol"]
+			}
 		]
 	},
-		{
+	{
 		"id": 4,
-		"question": "Runda 3: Wpisz C",
+		"question": "Zwierzę, które kojarzy się z powolnością.",
 		"answers": [
-			{"text": "C", "points": 100}
+			{
+				"text": "Żółw",
+				"points": 40,
+				"synonyms": ["zolw", "zolwik"]
+			},
+			{
+				"text": "Ślimak",
+				"points": 30,
+				"synonyms": ["slimak", "winniczek"]
+			},
+			{
+				"text": "Leniwiec",
+				"points": 20,
+				"synonyms": ["sloth", "lenwiec"]
+			},
+			{
+				"text": "Koala",
+				"points": 5,
+				"synonyms": ["miś koala"]
+			},
+			{
+				"text": "Osioł",
+				"points": 5,
+				"synonyms": ["osiol", "uparty"]
+			}
 		]
 	},
-		{
+	{
 		"id": 5,
-		"question": "Runda 3: Wpisz C",
+		"question": "Co robimy, gdy nagle braknie prądu?",
 		"answers": [
-			{"text": "C", "points": 100}
+			{
+				"text": "Szukamy świeczki",
+				"points": 30,
+				"synonyms": ["swieczka", "świeczka", "zapalamy świeczkę", "swieczki"]
+			},
+			{
+				"text": "Włączamy latarkę",
+				"points": 25,
+				"synonyms": ["latarka", "latarke", "swiecimy telefonem", "telefon"]
+			},
+			{
+				"text": "Szukamy bezpieczników",
+				"points": 20,
+				"synonyms": ["korki", "bezpieczniki", "skrzynka", "włączamy korki", "sprawdzamy korki"]
+			},
+			{
+				"text": "Idziemy spać",
+				"points": 15,
+				"synonyms": ["spanie", "spimy"]
+			},
+			{
+				"text": "Krzyczymy",
+				"points": 10,
+				"synonyms": ["krzyk", "boimy się", "przeklinamy"]
+			}
 		]
-	},
-		{
-		"id": 6,
-		"question": "Runda 3: Wpisz C",
-		"answers": [
-			{"text": "C", "points": 100}
-		]
-	},
-	
+	}
 ]

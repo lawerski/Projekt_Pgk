@@ -1,5 +1,6 @@
 extends Node
 
+# --- SYGNAŁY ---
 signal state_change_requested(new_state)
 signal round_message(msg)
 signal timer_start(duration, type)
@@ -10,14 +11,19 @@ var current_substate = RoundState.FACEOFF
 var playing_team: int = 0
 var strikes: int = 0
 var round_bank: int = 0
-var faceoff_winner_id: int = -1
-var waiting_for_decision: bool = false
+var faceoff_winner_id: int = -1 
+var waiting_for_decision: bool = false 
 
-# Odniesienia (ustawiane przez GameManager)
-var q_manager = null
-var t_manager = null
-var current_question = {}
+# --- ZMIENNE DO LOGIKI PRZEBIJANIA W POJEDYNKU ---
+var faceoff_pending_score: int = -1 	
+var faceoff_pending_team_idx: int = -1 
 
+# Referencje
+var q_manager = null 
+var t_manager = null 
+var current_question = {} 
+
+# Inicjuje nową rundę, resetuje stan gry i przygotowuje do pojedynku
 func start_round(question, round_idx):
 	current_question = question
 	round_bank = 0
@@ -25,115 +31,169 @@ func start_round(question, round_idx):
 	current_substate = RoundState.FACEOFF
 	waiting_for_decision = false
 	
-	# Pobierz graczy do pojedynku
+	faceoff_pending_score = -1
+	faceoff_pending_team_idx = -1
+	
 	var p1 = t_manager.get_faceoff_player(0, round_idx)
 	var p2 = t_manager.get_faceoff_player(1, round_idx)
 	
-	emit_signal("round_message", "POJEDYNEK! Do tablicy: %s vs %s" % [str(p1), str(p2)])
+	_log_info("POJEDYNEK! Do tablicy: %s (A) vs %s (B)" % [str(p1), str(p2)])
 
+# Główny router inputu, kieruje odpowiedź gracza do odpowiedniej podfunkcji w zależności od stanu rundy
 func handle_input(player_id: int, text: String, team_idx: int):
-	print("DEBUG: RoundManager input: ", text)
 	match current_substate:
 		RoundState.FACEOFF:
 			_handle_faceoff_answer(player_id, text, team_idx)
+			
 		RoundState.DECISION:
-			_handle_decision(player_id, text)
+			if player_id == faceoff_winner_id:
+				_handle_decision(player_id, text)
+				
 		RoundState.TEAM_PLAY:
 			if team_idx == playing_team:
-				_process_game_answer(text)
+				_process_game_answer(text, team_idx)
+			else:
+				print("IGNOROWANE: Odpowiada %s, a tura należy do %s" % [_get_team_name(team_idx), _get_team_name(playing_team)])
+				
 		RoundState.STEAL:
-			# W fazie kradzieży odpowiada tylko kapitan drużyny kradnącej
-			# (Dla uproszczenia testu: każdy z tej drużyny)
 			if team_idx == playing_team:
-				_process_steal_answer(text)
+				_process_steal_answer(text, team_idx)
 
+# Obsługuje odpowiedź w fazie pojedynku (FACEOFF), sprawdzając czy jest to TOP odpowiedź lub czy ma czekać na przebicie
 func _handle_faceoff_answer(player_id, text, team_idx):
-	var result = q_manager.check_answer(text, current_question)
+	if faceoff_pending_score != -1:
+		await _handle_faceoff_rebuttal(player_id, text, team_idx)
+		return
+
+	emit_signal("round_message", "Sędzia sprawdza odpowiedź: '%s'..." % text)
+	
+	var result = await q_manager.check_answer(text, current_question)
 	
 	if result:
-		round_bank += result["points"]
+		var points = result["points"]
+		round_bank += points
 		q_manager.reveal_answer(result)
 		
-		emit_signal("round_message", "TRAFIENIE! '%s' (+%d). Bank: %d" % [result["text"], result["points"], round_bank])
-		
-		# SPRAWDZENIE CZY TO JUŻ KONIEC (Dla pytań z 1 odpowiedzią)
-		if q_manager.are_all_revealed_in_question(current_question):
-			print("DEBUG: Pojedynek wyczyścił tablicę! Koniec rundy.")
-			_finish_round(team_idx)
-			return
-
-		# Czy to najlepsza odpowiedź?
 		var is_top = (current_question["answers"][0]["text"] == result["text"])
 		
 		if is_top:
-			emit_signal("round_message", "TOP ODPOWIEDŹ! Decyzja: Grasz (G) czy Oddajesz (O)?")
-			faceoff_winner_id = player_id
-			playing_team = team_idx
-			waiting_for_decision = true
-			current_substate = RoundState.DECISION
+			_log_info("[%s] TRAFIENIE! Top odpowiedź '%s' (+%d)!" % [_get_team_name(team_idx), result["text"], points])
+			_win_faceoff(player_id, team_idx)
 		else:
-			playing_team = team_idx
-			current_substate = RoundState.TEAM_PLAY
-			emit_signal("round_message", "Dobra odpowiedź! Gra drużyna " + str(team_idx))
+			faceoff_pending_score = points
+			faceoff_pending_team_idx = team_idx
+			faceoff_winner_id = player_id 
+			
+			_log_info("[%s] TRAFIENIE! '%s' (+%d). Ale to nie TOP..." % [_get_team_name(team_idx), result["text"], points])
+			_log_info("Szansa dla przeciwnika na przebicie wyniku!")
 	else:
-		emit_signal("round_message", "Pudło w pojedynku!")
+		_log_info("[%s] PUDŁO w pojedynku! Szansa dla przeciwnika." % _get_team_name(team_idx))
 
+# Obsługuje próbę przebicia w pojedynku przez drugiego gracza, po tym jak pierwszy trafił, ale nie TOP
+func _handle_faceoff_rebuttal(player_id, text, team_idx):
+	if team_idx == faceoff_pending_team_idx:
+		return 
+		
+	emit_signal("round_message", "Sędzia sprawdza przebicie: '%s'..." % text)
+	
+	var result = await q_manager.check_answer(text, current_question)
+	
+	if result:
+		var points = result["points"]
+		round_bank += points
+		q_manager.reveal_answer(result)
+		
+		if points > faceoff_pending_score:
+			_log_info("[%s] PRZEBICIE! '%s' (+%d) jest lepsze niż %d pkt!" % [_get_team_name(team_idx), result["text"], points, faceoff_pending_score])
+			_win_faceoff(player_id, team_idx)
+		else:
+			_log_info("[%s] '%s' (+%d) to za mało, by przebić %d pkt." % [_get_team_name(team_idx), result["text"], points, faceoff_pending_score])
+			_win_faceoff(faceoff_winner_id, faceoff_pending_team_idx)
+	else:
+		_log_info("[%s] PUDŁO! Wygrywa zespół, który trafił cokolwiek." % _get_team_name(team_idx))
+		_win_faceoff(faceoff_winner_id, faceoff_pending_team_idx)
+
+# Kończy pojedynek, ustawia zwycięzcę i przechodzi do fazy DECISION (decyzji o grze)
+func _win_faceoff(winner_player_id, winner_team_idx):
+	faceoff_winner_id = winner_player_id
+	playing_team = winner_team_idx
+	
+	if q_manager.are_all_revealed_in_question(current_question):
+		_log_info("Pojedynek wyczyścił tablicę! Koniec rundy.")
+		_finish_round(winner_team_idx)
+		return
+
+	waiting_for_decision = true
+	current_substate = RoundState.DECISION
+	_log_info("[%s] WYGRANY POJEDYNEK! Decyzja (Gracz %d): [G]RAMY czy [O]DDAJEMY?" % [_get_team_name(winner_team_idx), winner_player_id])
+
+# Obsługuje komendę gracza zwycięskiego w pojedynku (GRAMY lub ODDAJEMY)
 func _handle_decision(player_id: int, text: String):
-	if player_id != faceoff_winner_id: return # Tylko zwycięzca decyduje
-
 	var command = text.to_upper()
-	if command == "PLAY" or command == "GRAMY":
+	if command == "GRAMY" or command == "PLAY":
 		current_substate = RoundState.TEAM_PLAY
-		emit_signal("round_message", "Decyzja: GRAMY! Odpowiada Twoja drużyna.")
-	elif command == "PASS" or command == "ODDAJEMY":
+		_log_info("[%s] Decyzja: GRAMY! Tablica należy do nas." % _get_team_name(playing_team))
+	elif command == "ODDAJEMY" or command == "PASS":
 		playing_team = 1 if playing_team == 0 else 0
 		current_substate = RoundState.TEAM_PLAY
-		emit_signal("round_message", "Decyzja: ODDAJEMY! Przeciwnicy przejmują tablicę.")
+		_log_info("[%s] Decyzja: ODDAJEMY! Tablica dla przeciwników (%s)." % [_get_team_name(1 if playing_team==0 else 0), _get_team_name(playing_team)])
 
-func _process_game_answer(text):
-	var result = q_manager.check_answer(text, current_question)
+# Przetwarza odpowiedź drużyny grającej w fazie TEAM_PLAY, nalicza punkty lub błędy
+func _process_game_answer(text, team_idx):
+	emit_signal("round_message", "Sędzia sprawdza...")
+	
+	var result = await q_manager.check_answer(text, current_question)
 	
 	if result:
 		round_bank += result["points"]
 		q_manager.reveal_answer(result)
-		emit_signal("round_message", "DOBRA ODPOWIEDŹ! '%s' (+%d)" % [result["text"], result["points"]])
+		_log_info("[%s] DOBRA ODPOWIEDŹ! '%s' (+%d)" % [_get_team_name(team_idx), result["text"], result["points"]])
 		
 		if q_manager.are_all_revealed_in_question(current_question):
-			print("DEBUG: Wszystko odkryte. Koniec rundy.")
 			_finish_round(playing_team)
 	else:
 		strikes += 1
-		emit_signal("round_message", "BŁĄD nr " + str(strikes))
+		_log_info("[%s] BŁĄD nr %d" % [_get_team_name(team_idx), strikes])
 		
 		if strikes == 2:
-			emit_signal("round_message", "NARADA (30s) - Uważajcie!")
+			var opponent = 1 if playing_team == 0 else 0
+			_log_info("UWAGA: Narada dla %s (Opponent)" % _get_team_name(opponent))
+			emit_signal("timer_start", 15.0, "consultation")
 			
 		if strikes >= 3:
-			_trigger_steal() # <--- TUTAJ BYŁ BŁĄD, TERAZ FUNKCJA ISTNIEJE PONIŻEJ
+			_trigger_steal()
 
-# --- TEJ FUNKCJI BRAKOWAŁO ---
+# Inicjuje fazę kradzieży (STEAL) po osiągnięciu 3 błędów przez drużynę grającą, oddając tablicę przeciwnikom
 func _trigger_steal():
 	current_substate = RoundState.STEAL
-	# Zmiana drużyny na przeciwną (tę która kradnie)
-	playing_team = 1 if playing_team == 0 else 0
-	
-	print("DEBUG: Przełączenie na fazę STEAL. Odpowiada drużyna: ", playing_team)
-	emit_signal("round_message", "PRZEJĘCIE! Szansa dla Drużyny " + str(playing_team))
-# -----------------------------
+	playing_team = 1 if playing_team == 0 else 0 
+	_log_info("PRZEJĘCIE! Szansa dla %s!" % _get_team_name(playing_team))
+	emit_signal("timer_start", 10.0, "answer")
 
-func _process_steal_answer(text):
-	var result = q_manager.check_answer(text, current_question)
+# Przetwarza odpowiedź drużyny próbującej kradzieży (STEAL), kończąc rundę sukcesem lub porażką
+func _process_steal_answer(text, team_idx):
+	emit_signal("round_message", "Weryfikacja kradzieży...")
+	
+	var result = await q_manager.check_answer(text, current_question)
+	
 	if result:
 		round_bank += result["points"]
-		emit_signal("round_message", "KRADZIEŻ UDANA! '+%d'" % result["points"])
-		# Wygrywa drużyna kradnąca (obecna playing_team)
-		_finish_round(playing_team)
+		_log_info("[%s] KRADZIEŻ UDANA! +%d pkt. Wygrywacie rundę!" % [_get_team_name(team_idx), result["points"]])
+		_finish_round(team_idx)
 	else:
-		emit_signal("round_message", "KRADZIEŻ NIEUDANA! Punkty wracają.")
-		# Wygrywa drużyna pierwotna (przeciwna do obecnej kradnącej)
-		var original_team = 1 if playing_team == 0 else 0
+		var original_team = 1 if team_idx == 0 else 0
+		_log_info("[%s] KRADZIEŻ NIEUDANA! Punkty wracają do %s." % [_get_team_name(team_idx), _get_team_name(original_team)])
 		_finish_round(original_team)
 
+# Kończy rundę, dodaje zebrane punkty do wyniku zwycięskiej drużyny i prosi o zmianę stanu gry
 func _finish_round(winner_idx):
 	t_manager.add_score(winner_idx, round_bank)
 	emit_signal("state_change_requested", "ROUND_END")
+
+# Zwraca czytelną nazwę drużyny (DRUŻYNA A/B) na podstawie indeksu
+func _get_team_name(idx):
+	return "DRUŻYNA A" if idx == 0 else "DRUŻYNA B"
+
+# Wysyła wiadomość do konsoli/UI za pomocą sygnału round_message
+func _log_info(msg):
+	emit_signal("round_message", msg)

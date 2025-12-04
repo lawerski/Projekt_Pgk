@@ -104,42 +104,44 @@ func process_player_input(player_id: int, text: String):
 				final_manager.handle_input(text, false)
 
 func _input(event):
-	if not event is InputEventKey or not event.pressed: return
+	if not event is InputEventKey or not event.pressed:
+		return
 
-	# START GRY
+	# START GRY / RUNDY
 	if event.keycode == KEY_SPACE:
 		start_next_round()
 		return
 
-	# INPUT DO TESTU
 	var text_input = ""
-	var player_id = 1 # Domyślnie Gracz 1
+	var player_id = -1 # ID gracza, który "niby" nacisnął przycisk
 	
 	match event.keycode:
-		# Odpowiedzi A, B, C (dla uproszczonego JSONa)
-		KEY_A: text_input = "A" 
-		KEY_B: text_input = "B" 
-		KEY_C: text_input = "C" 
-		
-		# Symulacja wygrania pojedynku (klawisz 1 -> odpowiedź A)
-		KEY_1: 
-			player_id = 1
-			text_input = "A" 
-		# Decyzja "Gramy"
-		KEY_G: 
-			player_id = 1
-			text_input = "GRAMY"
-		
-		# Skip w finale
-		KEY_S:
-			text_input = "SKIP"
+		# --- STANDARDOWE RUNDY (A, B, C) ---
+		# Player 1: Q, A, Z
+		KEY_Q: player_id = 1; text_input = "autokar"
+		KEY_A: player_id = 1; text_input = "auto"
+		KEY_Z: player_id = 1; text_input = "C"
+
+		# Player 2: O, K, M
+		KEY_O: player_id = 2; text_input = "auto"
+		KEY_K: player_id = 2; text_input = "Bicykl"
+		KEY_M: player_id = 2; text_input = "C"
+
+		# --- DECYZJE ---
+		# Player 1: D = GRAMY, F = ODDAJEMY
+		KEY_D: player_id = 1; text_input = "GRAMY"
+		KEY_F: player_id = 1; text_input = "ODDAJEMY"
+
+		# Player 2: H = GRAMY, J = ODDAJEMY
+		KEY_H: player_id = 2; text_input = "GRAMY"
+		KEY_J: player_id = 2; text_input = "ODDAJEMY"
 
 	if text_input != "":
-		# print("DEBUG INPUT: Wysyłam '%s'" % text_input)
+		# print("DEBUG INPUT: Gracz %d wysyła '%s'" % [player_id, text_input])
 		process_player_input(player_id, text_input)
 
+
 # --- FUNKCJE ODBIERAJĄCE SYGNAŁY (CALLBACKI) ---
-# To ich brakowało i powodowały błąd!
 
 func _on_round_state_change(new_state_name):
 	if new_state_name == "ROUND_END":
