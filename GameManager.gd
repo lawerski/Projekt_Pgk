@@ -1,91 +1,175 @@
 extends Node
 
-@onready var question_manager = $QuestionManager
-
-enum GameState {
-	LOBBY,
-	ROUND_START,
-	PLAYER_INPUT,
-	REVEAL,
-	ROUND_END
-}
-
-var current_state: GameState = GameState.LOBBY
+# --- ZMIENNE ---
 var players: Dictionary = {}
-var current_question_data: Dictionary = {}
 
-func _ready() -> void:
-	print(" GAME MANAGER START")
-	print("Stan początkowy: %s" % current_state)
+# Podłączone moduły (dzieci w drzewie sceny)
+@onready var team_manager = $TeamManager
+@onready var question_manager = $QuestionManager
+@onready var round_manager = $RoundManager
+@onready var final_manager = $FinalManager
 
-func change_state(new_state: GameState):
-	var old_state_name = GameState.keys()[current_state]
-	var new_state_name = GameState.keys()[new_state]
-	
-	print("[GameManager] Zmiana stanu: %s -> %s" % [old_state_name, new_state_name])
-	current_state = new_state
-	
-	_handle_state_logic()
-	
-func _handle_state_logic():
-	match current_state:
-		GameState.LOBBY:
-			print("Host oczekuje na połączenia...")
-		GameState.ROUND_START:
-			print("Start rundy: Pobieranie pytania..")
-			if question_manager:
-				current_question_data = question_manager.get_random_question()
-				if current_question_data:
-					print("Pytanie: " + str(current_question_data["question"]))
-					change_state(GameState.PLAYER_INPUT)
-					#wyslanie pytania do UI feature
-		GameState.PLAYER_INPUT:
-			print("Oczekiwanie na input od graczy (smartfony).")
-		GameState.REVEAL:
-			print("Sprawdzanie odpowiedzi i animacja tablicy.")
-		GameState.ROUND_END:
-			print("Koniec rundy. Aktualizacja wyników.")
+enum GameState { LOBBY, ROUND_START, ROUND_PLAY, FINAL }
+var current_state = GameState.LOBBY
+var round_counter = 0
 
-func start_game():
-	print("Próba rozpoczecia gry...")
-	
-	if players.size() < 2:
-		print("[BŁĄD] Za mało graczy. Wymaganych: 2, Obecnie: %d" % players.size())
+func _ready():
+	# 1. Konfiguracja referencji
+	if round_manager and question_manager and team_manager:
+		round_manager.q_manager = question_manager
+		round_manager.t_manager = team_manager
+	else:
+		printerr("[GameManager] BŁĄD: Brakuje węzłów-dzieci (TeamManager, itp.)!")
 		return
 	
-	change_state(GameState.ROUND_START)
+	# 2. Podłączenie sygnałów LOGICZNYCH
+	round_manager.connect("state_change_requested", _on_round_state_change)
+	final_manager.connect("final_finished", _on_final_end)
 	
-func join_fake_player(name: String):
-	var new_id = players.size() + 1
-	players[new_id] = name
-	print("Dołącza gracz: %s. Razem graczy: %d" % [name, players.size()])
+	# 3. Podłączenie sygnałów DEBUGOWYCH (To naprawia Twój błąd!)
+	round_manager.connect("round_message", _on_debug_message)
+	round_manager.connect("timer_start", _on_debug_timer)
+	
+	# Podłączenie sygnałów DEBUGOWYCH (Finał)
+	final_manager.connect("final_update", _on_debug_final_update)
+	final_manager.connect("play_sound", _on_debug_sound)
+	
+	# 4. Start setupu
+	setup_debug_game()
 
-var chars = "abcdefghijklmnoprstuvwxyz"
-func generate_fake_name(letters, length):
-	var word: String
-	var n_char = len(letters)
+func setup_debug_game():
+	print("--- TRYB DEBUG: Dodawanie wirtualnych graczy ---")
+	players[1] = "Ania"
+	players[2] = "Bartek"
+	players[3] = "Celina"
+	players[4] = "Darek"
 	
-	for i in range(length):
-		word += chars[randi() % n_char]
+	team_manager.teams[0] = [1, 3] # Drużyna A
+	team_manager.teams[1] = [2, 4] # Drużyna B
+	team_manager.assign_captains()
 	
-	return word
+	print("Gracze dodani. Wciśnij SPACJĘ (klikając w okno gry), aby rozpocząć.")
+
+# --- GŁÓWNA PĘTLA ---
+
+func start_next_round():
+	print("\n--- [GAME MANAGER] Rozpoczynanie nowej sekwencji ---")
 	
-func _input(event):
-	if event.is_action_pressed("ui_accept"):
-		start_game()
+	# 1. Sprawdź czy ktoś wchodzi do finału
+	# UWAGA: Próg ustawiony nisko (10 pkt) do testów. W pełnej grze zmień na 300!
+	var finalist = team_manager.check_for_finalist()
 	
-	if event is InputEventKey and event.pressed and event.keycode == KEY_T:
-		if current_state == GameState.PLAYER_INPUT:
-			var test_input = "katomierz"
-			print("testuje input: " + test_input)
+	if finalist != -1:
+		print("!!! MAMY FINALISTĘ (Drużyna %d). Uruchamiam procedurę finałową..." % finalist)
+		start_finale(finalist)
+		return
+
+	# 2. Jeśli nie ma finału, graj dalej
+	print("DEBUG: Brak rozstrzygnięcia. Gramy kolejną rundę.")
+	
+	current_state = GameState.ROUND_START
+	round_counter += 1
+	
+	var q = question_manager.get_random_question()
+	if q.is_empty():
+		print("BŁĄD KRYTYCZNY: Brak pytań do nowej rundy!")
+		return
+	
+	current_state = GameState.ROUND_PLAY
+	round_manager.start_round(q, round_counter - 1)
+
+func start_finale(team_idx):
+	current_state = GameState.FINAL
+	print("WIELKI FINAŁ! Drużyna: " + str(team_idx))
+	
+	# Pobierz 5 pytań (jeśli brakuje unikalnych, dobierze użyte)
+	var final_qs = question_manager.get_questions_exclude_used(5)
+	final_manager.setup_final(final_qs)
+
+# --- OBSŁUGA INPUTU ---
+
+func process_player_input(player_id: int, text: String):
+	# Sprawdzamy w jakiej drużynie jest gracz
+	var team_idx = team_manager.get_player_team_index(player_id)
+	
+	match current_state:
+		GameState.ROUND_PLAY:
+			round_manager.handle_input(player_id, text, team_idx)
 			
-			var result = question_manager.check_answer(test_input, current_question_data)
-			
-			if result:
-				print("Trafienie! Punkty: " + str(result["points"]))
-				# feature - zmiana stanu gry na reveal
+		GameState.FINAL:
+			# W finale przekazujemy input do final_manager
+			if text == "SKIP":
+				final_manager.handle_input("", true)
 			else:
-				print("Pudlo")
+				final_manager.handle_input(text, false)
+
+func _input(event):
+	if not event is InputEventKey or not event.pressed:
+		return
+
+	# START GRY / RUNDY
+	if event.keycode == KEY_SPACE:
+		start_next_round()
+		return
+
+	var text_input = ""
+	var player_id = -1 # ID gracza, który "niby" nacisnął przycisk
 	
-	if event is InputEventKey and event.pressed and event.keycode == KEY_A:
-		join_fake_player(generate_fake_name(chars, 4))
+	match event.keycode:
+		# --- STANDARDOWE RUNDY (A, B, C) ---
+		# Player 1: Q, A, Z
+		KEY_Q: player_id = 1; text_input = "autokar"
+		KEY_A: player_id = 1; text_input = "auto"
+		KEY_Z: player_id = 1; text_input = "C"
+
+		# Player 2: O, K, M
+		KEY_O: player_id = 2; text_input = "auto"
+		KEY_K: player_id = 2; text_input = "Bicykl"
+		KEY_M: player_id = 2; text_input = "C"
+
+		# --- DECYZJE ---
+		# Player 1: D = GRAMY, F = ODDAJEMY
+		KEY_D: player_id = 1; text_input = "GRAMY"
+		KEY_F: player_id = 1; text_input = "ODDAJEMY"
+
+		# Player 2: H = GRAMY, J = ODDAJEMY
+		KEY_H: player_id = 2; text_input = "GRAMY"
+		KEY_J: player_id = 2; text_input = "ODDAJEMY"
+
+	if text_input != "":
+		# print("DEBUG INPUT: Gracz %d wysyła '%s'" % [player_id, text_input])
+		process_player_input(player_id, text_input)
+
+
+# --- FUNKCJE ODBIERAJĄCE SYGNAŁY (CALLBACKI) ---
+
+func _on_round_state_change(new_state_name):
+	if new_state_name == "ROUND_END":
+		print(">>> [RUNDA]: Koniec rundy! Wyniki zaktualizowane.")
+		# Automatyczny start kolejnej sekwencji po 3 sekundach
+		await get_tree().create_timer(3.0).timeout
+		start_next_round()
+
+func _on_final_end(score, won):
+	if won:
+		print(">>> [KONIEC GRY]: WYGRANA! Zdobyto 200 pkt w finale!")
+	else:
+		print(">>> [KONIEC GRY]: Przegrana. Wynik finału: " + str(score))
+
+# --- FUNKCJE DEBUGUJĄCE (WYPISYWANIE W KONSOLI) ---
+
+func _on_debug_message(msg):
+	print("\n>>> [GRA]: " + msg)
+
+func _on_debug_timer(duration, type):
+	print(">>> [ZEGAR]: Start odliczania (%s s) - %s" % [str(duration), type])
+
+func _on_debug_final_update(question_text, time, current_score):
+	# Wyświetla stan finału w konsoli (zamiast na ekranie)
+	print(">>> [FINAŁ]: Pyt: '%s' | Czas: %.1f | Wynik: %d" % [question_text, time, current_score])
+
+func _on_debug_sound(sound_name):
+	if sound_name == "repeat":
+		print("!!! [AUDIO]: DŹWIĘK BŁĘDU (BYŁO!) !!!")
+	else:
+		print(">>> [AUDIO]: " + sound_name)

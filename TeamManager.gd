@@ -1,0 +1,48 @@
+extends Node
+class_name TeamManager
+
+var teams: Dictionary = { 0: [], 1: [] }
+var team_scores: Dictionary = { 0: 0, 1: 0 }
+var captains: Dictionary = { 0: -1, 1: -1 } 
+
+# Zwraca indeks drużyny (0 lub 1) na podstawie ID gracza; jeśli nie znaleziono, zwraca -1
+func get_player_team_index(player_id: int) -> int:
+	if player_id in teams[0]: return 0
+	if player_id in teams[1]: return 1
+	return -1 
+
+# Przypisuje gracza o danym ID do określonej drużyny (indeks 0 lub 1), usuwając go wcześniej ze starej drużyny
+func set_player_team(player_id: int, team_index: int):
+	if player_id in teams[0]: teams[0].erase(player_id)
+	if player_id in teams[1]: teams[1].erase(player_id)
+	
+	if teams.has(team_index):
+		teams[team_index].append(player_id)
+
+# Zwraca ID gracza, który ma podejść do pojedynku w danej drużynie w oparciu o indeks rundy (cykliczna rotacja)
+func get_faceoff_player(team_idx: int, round_index: int) -> int:
+	var members = teams[team_idx]
+	if members.is_empty(): return -1
+
+	var player_idx = round_index % members.size()
+	return members[player_idx]
+
+# Ustawia pierwszego gracza z listy w każdej drużynie jako kapitana
+func assign_captains():
+	if not teams[0].is_empty(): captains[0] = teams[0][0]
+	if not teams[1].is_empty(): captains[1] = teams[1][0]
+
+# Zwraca ID kapitana dla danej drużyny
+func get_captain_id(team_idx: int) -> int:
+	return captains.get(team_idx, -1)
+
+# Dodaje określoną liczbę punktów do wyniku danej drużyny
+func add_score(team_idx: int, points: int):
+	team_scores[team_idx] += points
+
+# Sprawdza, czy któraś z drużyn osiągnęła próg 300 punktów i kwalifikuje się do finału
+func check_for_finalist() -> int:
+	print("[TeamManager] Sprawdzam punkty: A=%d, B=%d (Wymagane: 300)" % [team_scores[0], team_scores[1]])
+	if team_scores[0] >= 300: return 0
+	if team_scores[1] >= 300: return 1
+	return -1 # Zwraca -1, jeśli nikt jeszcze nie wygrał
