@@ -31,7 +31,33 @@ func start_player(player_num):
 	time_left = 30.0 if player_num == 1 else 40.0
 	print("[FinalManager] Czas start: ", time_left)
 	
+	# Znajdź ID gracza finałowego z wygranej drużyny
+	var winner_team = get_parent().team_manager.check_for_finalist()
+	if winner_team == -1: winner_team = 0 # Fallback do A
+	
+	# Wybieramy gracza nr 1 i nr 2 z tej drużyny
+	var members = get_parent().team_manager.teams.get(winner_team, [])
+	var active_player_id = -1
+	
+	if player_num == 1:
+		if members.size() > 0: active_player_id = members[0]
+	else:
+		if members.size() > 1: active_player_id = members[1]
+		elif members.size() > 0: active_player_id = members[0] # Fallback jeśli 1 osoba
+		
+	if active_player_id != -1:
+		_send_input_to_finalist(active_player_id)
+		
 	_send_current_question()
+
+func _send_input_to_finalist(player_id_int):
+	var pid_str = str(player_id_int)
+	NetworkManager.send_to_client(pid_str, { "type": "set_screen", "screen": "input" })
+	
+	# Pozostałym wyślij wait
+	for cid in NetworkManager.get_connected_clients():
+		if str(cid) != pid_str:
+			NetworkManager.send_to_client(cid, { "type": "set_screen", "screen": "wait", "msg": "FINAŁ! Odpowiada finalista..." })
 
 # Obsługa czasu gry
 func _process(delta):

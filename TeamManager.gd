@@ -12,10 +12,10 @@ func get_player_team_index(player_id: int) -> int:
 	return -1 
 
 # Przypisuje gracza o danym ID do określonej drużyny (indeks 0 lub 1), usuwając go wcześniej ze starej drużyny
-func set_player_team(player_id: int, team_index: int):
-	if player_id in teams[0]: teams[0].erase(player_id)
+func set_player_team(player_id: int, team_index):
+	team_index = int(team_index)
+	if player_id in teams[0]: teams[0].erase(player_id)	
 	if player_id in teams[1]: teams[1].erase(player_id)
-	
 	if teams.has(team_index):
 		teams[team_index].append(player_id)
 

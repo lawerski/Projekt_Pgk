@@ -15,6 +15,10 @@ run/main_scene="uid://01w6f6nt85mm"
 config/features=PackedStringArray("4.5", "Mobile")
 config/icon="res://icon.svg"
 
+[autoload]
+
+NetworkManager="*res://NetworkManager.gd"
+
 [rendering]
 
 renderer/rendering_method="mobile"

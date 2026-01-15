@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Let's Quiz - Dołącz</title>
+    <style>
+        :root {
+            --bg-color: #1a1a2e;
+            --accent-color: #e94560;
+            --secondary-color: #16213e;
+            --text-color: #ffffff;
+            --highlight: #0f3460;
+            --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            margin: 0; padding: 0;
+            font-family: var(--font-main);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            min-height: 100vh; overflow: hidden;
+            touch-action: none;
+        }
+        .screen {
+            width: 90%; max-width: 400px;
+            display: none; flex-direction: column;
+            align-items: center; text-align: center;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        .screen.active { display: flex; }
+        h1 { margin-bottom: 10px; color: var(--accent-color); text-transform: uppercase; letter-spacing: 2px; }
+        input[type="text"] {
+            width: 100%; padding: 15px; margin-bottom: 10px;
+            border: 2px solid var(--highlight); border-radius: 8px;
+            background-color: var(--secondary-color); color: white;
+            font-size: 1.1rem; text-align: center; box-sizing: border-box;
+            outline: none;
+        }
+        input[type="text"]:focus { border-color: var(--accent-color); }
+        .btn {
+            width: 100%; padding: 15px; margin-top: 10px;
+            border: none; border-radius: 8px;
+            background-color: var(--accent-color); color: white;
+            font-size: 1.2rem; font-weight: bold; cursor: pointer;
+            box-shadow: 0 4px 0 #9e2a3b;
+            transition: transform 0.1s;
+        }
+        .btn:active { transform: translateY(4px); box-shadow: none; }
+        .canvas-wrapper {
+            background-color: white;
+            border-radius: 10px; padding: 5px; margin-bottom: 10px;
+            box-shadow: 0 0 15px rgba(233, 69, 96, 0.3);
+            cursor: crosshair; position: relative;
+        }
+        canvas { display: block; touch-action: none; }
+        .tools {
+            display: flex; gap: 8px; margin-bottom: 15px;
+            justify-content: center; flex-wrap: wrap; width: 100%;
+        }
+        .color-swatch {
+            width: 30px; height: 30px; border-radius: 50%;
+            border: 2px solid #fff; cursor: pointer;
+        }
+        .color-swatch.active { transform: scale(1.2); border-color: var(--accent-color); }
+        .btn-tool {
+            padding: 8px 12px; font-size: 0.85rem;
+            background-color: var(--secondary-color);
+            border: 1px solid white; border-radius: 5px; color: white;
+            cursor: pointer;
+        }
+        #file-upload { display: none; }
+        #lobby-avatar-img {
+            width: 150px; height: 150px; border-radius: 10px;
+            background-color: white; border: 4px solid var(--accent-color);
+            margin-bottom: 20px; object-fit: contain;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        #status-bar { position: fixed; bottom: 10px; font-size: 0.8rem; opacity: 0.6; }
+    </style>
+</head>
+<body>
+    <div id="screen-login" class="screen active">
+        <h1>Twój Avatar</h1>
+        <div class="canvas-wrapper">
+            <canvas id="drawing-canvas" width="250" height="250"></canvas>
+        </div>
+        <div class="tools">
+            <div class="color-swatch active" style="background: black;" onclick="setColor('black', this)"></div>
+            <div class="color-swatch" style="background: #e94560;" onclick="setColor('#e94560', this)"></div>
+            <div class="color-swatch" style="background: #00b894;" onclick="setColor('#00b894', this)"></div>
+            <div class="color-swatch" style="background: #0984e3;" onclick="setColor('#0984e3', this)"></div>
+            <button class="btn-tool" onclick="clearCanvas()">🗑️ Wyczyść</button>
+            <button class="btn-tool" onclick="document.getElementById('file-upload').click()">📷 Zdjęcie</button>
+        </div>
+        <input type="file" id="file-upload" accept="image/*">
+        <input type="text" id="input-nick" placeholder="Twój Pseudonim" maxlength="12">
+        <input type="text" id="input-room" placeholder="Kod Pokoju (np. ABCD)" maxlength="4" style="text-transform: uppercase;">
+        <button class="btn" onclick="joinGame()">DOŁĄCZ</button>
+    </div>
+    <div id="screen-team" class="screen">
+        <h2>Wybierz drużynę</h2>
+        <button class="btn" style="background:#3498db;" onclick="chooseTeam(0)">Drużyna A</button>
+        <button class="btn" style="background:#f1c40f;color:#222;" onclick="chooseTeam(1)">Drużyna B</button>
+        <div id="team-status"></div>
+    </div>
+    <div id="screen-lobby" class="screen">
+        <h2>Czekamy na start...</h2>
+        <img id="lobby-avatar-img" src="" alt="Twój avatar">
+        <h1 id="lobby-nick">Gracz</h1>
+        <div class="loader">Patrz na duży ekran!</div>
+    </div>
+    <div id="screen-game-input" class="screen">
+        <h2 id="question-text">Wpisz odpowiedź:</h2>
+        <input type="text" id="game-answer-input" placeholder="..." autocomplete="off">
+        <button class="btn" onclick="sendAnswer()">WYŚLIJ</button>
+    </div>
+    <div id="screen-buzzer" class="screen">
+        <button class="btn" style="font-size:2rem; padding:40px;" onclick="sendBuzzer()">ZGŁASZAM SIĘ</button>
+    </div>
+    <div id="screen-wait" class="screen">
+        <h2 id="wait-msg">Czekaj na swoją kolej...</h2>
+    </div>
+    <div id="status-bar">Niepołączony</div>
+    <script>
+        let ws;
+        let playerNick = "";
+        let isVip = false;
+        let teamChosen = false;
+        
+        // Zaktualizowany adres Twojego serwera VPS
+        const SERVER_URL = "ws://188.68.247.138:8910";
+
+        // Globalna referencja do canvas
+        let canvas, ctx;
+
+        // Przenosimy inicjalizację do DOMContentLoaded
+        window.addEventListener('DOMContentLoaded', () => {
+            canvas = document.getElementById('drawing-canvas'); // Użyj poprawnego ID z HTML!
+            if (!canvas) {
+                console.error("Nie znaleziono elementu drawing-canvas!");
+                return;
+            }
+            ctx = canvas.getContext('2d');
+            
+            const fileInput = document.getElementById('file-upload');
+            let painting = false;
+
+            // Inicjalne tło
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.lineWidth = 5;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = 'black';
+
+            // Obsługa wczytywania pliku
+            if(fileInput) {
+                fileInput.addEventListener('change', (e) => {
+                    const file = e.target.files[0];
+                    if(!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const scale = Math.max(canvas.width / img.width, canvas.height / img.height);
+                            const x = (canvas.width / 2) - (img.width / 2) * scale;
+                            const y = (canvas.height / 2) - (img.height / 2) * scale;
+                            ctx.clearRect(0,0, canvas.width, canvas.height);
+                            ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+                        }
+                        img.src = event.target.result;
+                    }
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            function startPosition(e) { painting = true; draw(e); }
+            function endPosition() { painting = false; ctx.beginPath(); }
+            function draw(e) {
+                if (!painting) return;
+                // Poprawka na współrzędne relatywne do canvas
+                e.preventDefault(); // Zablokuj scrollowanie
+                let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                
+                const rect = canvas.getBoundingClientRect();
+                let x = clientX - rect.left;
+                let y = clientY - rect.top;
+
+                ctx.lineTo(x, y);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+            }
+
+            canvas.addEventListener('mousedown', startPosition);
+            canvas.addEventListener('mouseup', endPosition);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('touchstart', startPosition, {passive: false});
+            canvas.addEventListener('touchend', endPosition);
+            canvas.addEventListener('touchmove', draw, {passive: false});
+        });
+
+        // Funkcje globalne (dostępne dla onclick w HTML)
+        window.setColor = function(color, element) {
+            if(!ctx) return;
+            ctx.strokeStyle = color;
+            document.querySelectorAll('.color-swatch').forEach(el => el.classList.remove('active'));
+            if(element) element.classList.add('active');
+        }
+
+        window.clearCanvas = function() {
+            if(!ctx) return;
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        window.showScreen = function(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            const screen = document.getElementById(screenId);
+            if(screen) screen.classList.add('active');
+        }
+
+        window.chooseTeam = function(teamIdx) {
+            if (!ws) return;
+            ws.send(JSON.stringify({
+                type: "choose_team",
+                team: teamIdx
+            }));
+            const statusEl = document.getElementById('team-status');
+            if(statusEl) statusEl.innerText = "Wybrano drużynę: " + (teamIdx == 0 ? "A" : "B") + ". Czekaj na start...";
+        }
+
+        window.joinGame = function() {
+            if(!canvas) { alert("Canvas nie gotowy!"); return; }
+            
+            const nickInput = document.getElementById('input-nick');
+            const roomInput = document.getElementById('input-room');
+            const statusEl = document.getElementById('status-bar');
+
+            const nick = nickInput.value;
+            const room = roomInput.value.toUpperCase();
+
+            if (!nick || !room) { alert("Wpisz nick i kod!"); return; }
+            
+            const avatarData = canvas.toDataURL('image/png');
+            playerNick = nick;
+            
+            if(statusEl) statusEl.innerText = "Łączenie...";
+            
+            try {
+                ws = new WebSocket(SERVER_URL);
+            } catch(e) {
+                alert("Błąd inicjalizacji WebSocket.");
+                return;
+            }
+
+            ws.onopen = () => {
+                 if(statusEl) statusEl.innerText = "Połączono!";
+                ws.send(JSON.stringify({
+                    type: "join_request",
+                    room: room,
+                    name: playerNick,
+                    avatar: avatarData,
+                    team: -1 // Brak wyboru drużyny na starcie
+                }));
+            };
+
+            ws.onerror = (error) => {
+                console.error("Błąd WebSocket:", error);
+                 if(statusEl) statusEl.innerText = "Błąd połączenia z serwerem.";
+            };
+
+            ws.onmessage = e => {
+                const msg = JSON.parse(e.data);
+                console.log("ODEBRANO:", msg);
+                handleServerMessage(msg);
+            };
+
+            ws.onclose = () => {
+                 if(statusEl) statusEl.innerText = "Rozłączono.";
+            };
+        }
+
+        window.sendBuzzer = function() {
+            if(ws) ws.send(JSON.stringify({ type: "player_buzzer" }));
+        }
+
+        window.sendAnswer = function() {
+            const input = document.getElementById('game-answer-input');
+            const answer = input.value;
+            if(answer && ws) {
+                ws.send(JSON.stringify({
+                    type: "player_answer",
+                    answer: answer
+                }));
+                input.value = "";
+            }
+        }
+
+        function handleServerMessage(msg) {
+            if (msg.type === "join_error") {
+                alert("Pokój nie istnieje lub jest zamknięty.");
+                ws.close();
+                return;
+            }
+            if (msg.type === "join_accepted") {
+                isVip = !!msg.is_vip;
+                const img = document.getElementById('lobby-avatar-img');
+                if(img) img.src = canvas.toDataURL();
+                const nickEl = document.getElementById('lobby-nick');
+                if(nickEl) nickEl.innerText = playerNick;
+                showScreen('screen-team');
+            }
+            if (msg.type === "team_confirmed") {
+                teamChosen = true;
+                showScreen('screen-lobby');
+            }
+            if (msg.type === "question") {
+                const qt = document.getElementById('question-text');
+                if(qt) qt.innerText = msg.text;
+            }
+            if (msg.type === "input_active") {
+                showScreen("screen-game-input");
+            }
+            if (msg.type === "input_inactive") {
+                showScreen("screen-lobby");
+            }
+            if (msg.type === "set_screen") {
+                let screenMap = {
+                    "input": "screen-game-input",
+                    "buzzer": "screen-buzzer",
+                    "wait": "screen-wait",
+                    "lobby": "screen-lobby",
+                    "team": "screen-team",
+                    "login": "screen-login"
+                };
+                let screenId = screenMap[msg.screen] || ("screen-" + msg.screen);
+                showScreen(screenId);
+                if (msg.screen === "wait" && msg.msg) {
+                    const wm = document.getElementById('wait-msg');
+                    if(wm) wm.innerText = msg.msg;
+                }
+            }
+        }
+    </script>
+</body>
+</html>

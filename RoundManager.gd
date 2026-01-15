@@ -18,6 +18,10 @@ var waiting_for_decision: bool = false
 var faceoff_pending_score: int = -1 	
 var faceoff_pending_team_idx: int = -1 
 
+# Zmienne do kontroli odpytywania w grze drużynowej
+var current_member_index = 0 
+var faceoff_active_player_id: int = -1
+
 # Referencje
 var q_manager = null 
 var t_manager = null 
@@ -30,19 +34,61 @@ func start_round(question, round_idx):
 	strikes = 0
 	current_substate = RoundState.FACEOFF
 	waiting_for_decision = false
-	
+
 	faceoff_pending_score = -1
 	faceoff_pending_team_idx = -1
-	
+	faceoff_active_player_id = -1
+
 	var p1 = t_manager.get_faceoff_player(0, round_idx)
 	var p2 = t_manager.get_faceoff_player(1, round_idx)
-	
+
 	_log_info("POJEDYNEK! Do tablicy: %s (A) vs %s (B)" % [str(p1), str(p2)])
+
+	# WYŚLIJ PYTANIE DO WSZYSTKICH GRACZY (do testów)
+	var question_msg = {
+		"type": "question",
+		"text": question["question"]
+	}
+	for client_id in NetworkManager.get_connected_clients():
+		NetworkManager.send_to_client(client_id, question_msg)
+
+	# Dodaj to poniżej, aby aktywować input dla właściwej drużyny (np. A na start)
+	NetworkManager.send_input_active("A")
+
+	# Wyślij ekran BUZZER do wszystkich
+	for client_id in NetworkManager.get_connected_clients():
+		NetworkManager.send_to_client(client_id, { "type": "set_screen", "screen": "buzzer" })
+
+# Obsługa wciśnięcia buzera (wywoływana z GameManager)
+func handle_buzzer(player_id: int):
+	if current_substate != RoundState.FACEOFF or faceoff_active_player_id != -1:
+		return
+
+	faceoff_active_player_id = player_id
+	var team_idx = t_manager.get_player_team_index(player_id)
+	
+	_log_info("BUZER! Wcisnął gracz ID: %d (Drużyna %s)" % [player_id, _get_team_name(team_idx)])
+	
+	# Aktualizacja ekranów: Wygrywający ma Input, reszta Wait
+	NetworkManager.send_to_client(str(player_id), { "type": "set_screen", "screen": "input" })
+	
+	for cid in NetworkManager.get_connected_clients():
+		if str(cid) != str(player_id):
+			NetworkManager.send_to_client(cid, { "type": "set_screen", "screen": "wait", "msg": "Przeciwnik zgłosił się pierwszy!" })
+
 
 # Główny router inputu, kieruje odpowiedź gracza do odpowiedniej podfunkcji w zależności od stanu rundy
 func handle_input(player_id: int, text: String, team_idx: int):
 	match current_substate:
 		RoundState.FACEOFF:
+			# Sprawdzenie, czy odpowiada osoba, która wygrała buzer (lub faceoff_winner po nietrafionej odpowiedzi)
+			if faceoff_active_player_id != -1 and player_id != faceoff_active_player_id:
+				if faceoff_winner_id != -1 and player_id == faceoff_winner_id:
+					pass # To jest OK, kontynuacja (przebicie)
+				else:
+					print("IGNOROWANE: Input od gracza %d w fazie Faceoff (oczekiwany: %d)" % [player_id, faceoff_active_player_id])
+					return
+
 			_handle_faceoff_answer(player_id, text, team_idx)
 			
 		RoundState.DECISION:
@@ -51,7 +97,7 @@ func handle_input(player_id: int, text: String, team_idx: int):
 				
 		RoundState.TEAM_PLAY:
 			if team_idx == playing_team:
-				_process_game_answer(text, team_idx)
+				_handle_team_play_answer(player_id, text, team_idx)
 			else:
 				print("IGNOROWANE: Odpowiada %s, a tura należy do %s" % [_get_team_name(team_idx), _get_team_name(playing_team)])
 				
@@ -130,38 +176,99 @@ func _win_faceoff(winner_player_id, winner_team_idx):
 # Obsługuje komendę gracza zwycięskiego w pojedynku (GRAMY lub ODDAJEMY)
 func _handle_decision(player_id: int, text: String):
 	var command = text.to_upper()
-	if command == "GRAMY" or command == "PLAY":
+	if command == "GRAMY" or command == "PLAY" or command == "G":
 		current_substate = RoundState.TEAM_PLAY
 		_log_info("[%s] Decyzja: GRAMY! Tablica należy do nas." % _get_team_name(playing_team))
-	elif command == "ODDAJEMY" or command == "PASS":
+		_start_team_play_phase()
+	elif command == "ODDAJEMY" or command == "PASS" or command == "O":
 		playing_team = 1 if playing_team == 0 else 0
 		current_substate = RoundState.TEAM_PLAY
 		_log_info("[%s] Decyzja: ODDAJEMY! Tablica dla przeciwników (%s)." % [_get_team_name(1 if playing_team==0 else 0), _get_team_name(playing_team)])
+		_start_team_play_phase()
 
-# Przetwarza odpowiedź drużyny grającej w fazie TEAM_PLAY, nalicza punkty lub błędy
-func _process_game_answer(text, team_idx):
-	emit_signal("round_message", "Sędzia sprawdza...")
+
+# --- LOGIKA GRY DRUŻYNOWEJ (TEAM PLAY) ---
+
+func _start_team_play_phase():
+	current_substate = RoundState.TEAM_PLAY
+	# Znajdź początkowego gracza (np. tego co wygrał faceoff, albo pierwszego w drużynie)
+	# Dla uproszczenia: jeśli wygraliśmy faceoff, to active player już wstawia się w metodzie handle_input, 
+	# ale tutaj resetujemy indeks na 0 lub na konkretnego gracza.
+	# Ustawiamy na pierwszego gracza w liście drużyny.
+	current_member_index = 0
+	_update_input_for_active_team_member()
+
+
+func _update_input_for_active_team_member():
+	var team_members = t_manager.teams.get(playing_team, [])
+	if team_members.is_empty(): return
+	
+	current_member_index = current_member_index % team_members.size()
+	var active_player_id = team_members[current_member_index]
+	var active_id_str = str(active_player_id)
+	
+	var nick = "Gracz " + active_id_str # Możesz pobrać nick z GameManager jeśli masz dostęp
+	
+	# 1. Wyślij INPUT do aktywnego gracza
+	NetworkManager.send_to_client(active_id_str, { "type": "set_screen", "screen": "input" })
+	
+	# 2. Wyślij WAIT do reszty
+	for client_id in NetworkManager.get_connected_clients():
+		if client_id != active_id_str:
+			var is_same_team = t_manager.get_player_team_index(int(client_id)) == playing_team
+			var msg = "Twój kolega z drużyny odpowiada..." if is_same_team else "Druga drużyna odpowiada..."
+			NetworkManager.send_to_client(client_id, { "type": "set_screen", "screen": "wait", "msg": msg })
+
+
+func _handle_team_play_answer(player_id, text, team_idx):
+	# Sprawdzenie czy odpowiada właściwy gracz z kolejki
+	var team_members = t_manager.teams.get(playing_team, [])
+	var expected_id = team_members[current_member_index]
+	
+	if player_id != expected_id:
+		print("IGNOROWANE: Odpowiada %d, a kolejka gracza %d" % [player_id, expected_id])
+		return
+
+	emit_signal("round_message", "Sędzia sprawdza: '%s'..." % text)
 	
 	var result = await q_manager.check_answer(text, current_question)
 	
 	if result:
-		round_bank += result["points"]
-		q_manager.reveal_answer(result)
-		_log_info("[%s] DOBRA ODPOWIEDŹ! '%s' (+%d)" % [_get_team_name(team_idx), result["text"], result["points"]])
-		
-		if q_manager.are_all_revealed_in_question(current_question):
-			_finish_round(playing_team)
-	else:
-		strikes += 1
-		_log_info("[%s] BŁĄD nr %d" % [_get_team_name(team_idx), strikes])
-		
-		if strikes == 2:
-			var opponent = 1 if playing_team == 0 else 0
-			_log_info("UWAGA: Narada dla %s (Opponent)" % _get_team_name(opponent))
-			emit_signal("timer_start", 15.0, "consultation")
+		# Trafienie, ale sprawdź czy już nie było
+		if result["text"] in q_manager.get_revealed_answers(current_question):
+			_log_info("Ta odpowiedź już padła!")
+			# Nie zmieniaj gracza, niech próbuje innej? Albo uznaj za błąd?
+			# W Familiadzie powtórzenie to zazwyczaj strata lub prośba o inną. 
+			# Tu uznajemy za stratę kolejki lub prosimy o inną.
+			# Zróbmy BŁĄD dla uproszczenia (Strike)
+			_handle_strike(team_idx)
+		else:
+			round_bank += result["points"]
+			q_manager.reveal_answer(result)
+			_log_info("[%s] TRAFIENIE! '%s' (+%d)" % [_get_team_name(team_idx), result["text"], result["points"]])
 			
-		if strikes >= 3:
-			_trigger_steal()
+			if q_manager.are_all_revealed_in_question(current_question):
+				_finish_round(playing_team)
+			else:
+				# Następny gracz
+				current_member_index += 1
+				_update_input_for_active_team_member()
+	else:
+		_handle_strike(team_idx)
+
+func _handle_strike(team_idx):
+	strikes += 1
+	_log_info("[%s] BŁĄD nr %d/3" % [_get_team_name(team_idx), strikes])
+	
+	# Wibracja dla wszystkich w drużynie
+	for m_id in t_manager.teams.get(team_idx, []):
+		NetworkManager.send_to_client(str(m_id), { "type": "vibrate" })
+
+	if strikes >= 3:
+		_trigger_steal()
+	else:
+		current_member_index += 1
+		_update_input_for_active_team_member()
 
 # Inicjuje fazę kradzieży (STEAL) po osiągnięciu 3 błędów przez drużynę grającą, oddając tablicę przeciwnikom
 func _trigger_steal():
@@ -169,6 +276,16 @@ func _trigger_steal():
 	playing_team = 1 if playing_team == 0 else 0 
 	_log_info("PRZEJĘCIE! Szansa dla %s!" % _get_team_name(playing_team))
 	emit_signal("timer_start", 10.0, "answer")
+	
+	# Wyślij input do wszystkich z drużyny przeciwnej (narada)
+	var stealing_members = t_manager.teams.get(playing_team, [])
+	for mid in stealing_members:
+		NetworkManager.send_to_client(str(mid), { "type": "set_screen", "screen": "input" })
+		
+	# Wyślij wait do drużyny która straciła
+	var waiting_team = 1 if playing_team == 0 else 0
+	for mid in t_manager.teams.get(waiting_team, []):
+		NetworkManager.send_to_client(str(mid), { "type": "set_screen", "screen": "wait", "msg": "Przeciwnicy naradzają się do przejęcia!" })
 
 # Przetwarza odpowiedź drużyny próbującej kradzieży (STEAL), kończąc rundę sukcesem lub porażką
 func _process_steal_answer(text, team_idx):
