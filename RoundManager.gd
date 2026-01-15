@@ -21,6 +21,9 @@ var faceoff_pending_team_idx: int = -1
 # Zmienne do kontroli odpytywania w grze drużynowej
 var current_member_index = 0 
 var faceoff_active_player_id: int = -1
+var current_round_index: int = 0
+var faceoff_p1: int = -1
+var faceoff_p2: int = -1
 
 # Referencje
 var q_manager = null 
@@ -29,6 +32,7 @@ var current_question = {}
 
 # Inicjuje nową rundę, resetuje stan gry i przygotowuje do pojedynku
 func start_round(question, round_idx):
+	current_round_index = round_idx
 	current_question = question
 	round_bank = 0
 	strikes = 0
@@ -39,10 +43,10 @@ func start_round(question, round_idx):
 	faceoff_pending_team_idx = -1
 	faceoff_active_player_id = -1
 
-	var p1 = t_manager.get_faceoff_player(0, round_idx)
-	var p2 = t_manager.get_faceoff_player(1, round_idx)
+	faceoff_p1 = t_manager.get_faceoff_player(0, round_idx)
+	faceoff_p2 = t_manager.get_faceoff_player(1, round_idx)
 
-	_log_info("POJEDYNEK! Do tablicy: %s (A) vs %s (B)" % [str(p1), str(p2)])
+	_log_info("POJEDYNEK! Do tablicy: %s (A) vs %s (B)" % [str(faceoff_p1), str(faceoff_p2)])
 
 	# WYŚLIJ PYTANIE DO WSZYSTKICH GRACZY (do testów)
 	var question_msg = {
@@ -52,16 +56,26 @@ func start_round(question, round_idx):
 	for client_id in NetworkManager.get_connected_clients():
 		NetworkManager.send_to_client(client_id, question_msg)
 
-	# Dodaj to poniżej, aby aktywować input dla właściwej drużyny (np. A na start)
-	NetworkManager.send_input_active("A")
+	# Ustawienie ekranów: BUZZER tylko dla walczących, WAIT dla reszty
+	var p1_str = str(faceoff_p1)
+	var p2_str = str(faceoff_p2)
 
-	# Wyślij ekran BUZZER do wszystkich
 	for client_id in NetworkManager.get_connected_clients():
-		NetworkManager.send_to_client(client_id, { "type": "set_screen", "screen": "buzzer" })
+		var pid = NetworkManager.client_to_player_id.get(client_id, -1)
+		var pid_str = str(pid)
+		
+		if pid_str == p1_str or pid_str == p2_str:
+			NetworkManager.send_to_client(client_id, { "type": "set_screen", "screen": "buzzer" })
+		else:
+			NetworkManager.send_to_client(client_id, { "type": "set_screen", "screen": "wait", "msg": "Pojedynek: Gracz %s vs Gracz %s" % [p1_str, p2_str] })
 
 # Obsługa wciśnięcia buzera (wywoływana z GameManager)
 func handle_buzzer(player_id: int):
 	if current_substate != RoundState.FACEOFF or faceoff_active_player_id != -1:
+		return
+
+	# Walidacja - czy to właściwy gracz?
+	if player_id != faceoff_p1 and player_id != faceoff_p2:
 		return
 
 	faceoff_active_player_id = player_id
@@ -69,12 +83,16 @@ func handle_buzzer(player_id: int):
 	
 	_log_info("BUZER! Wcisnął gracz ID: %d (Drużyna %s)" % [player_id, _get_team_name(team_idx)])
 	
-	# Aktualizacja ekranów: Wygrywający ma Input, reszta Wait
-	NetworkManager.send_to_client(str(player_id), { "type": "set_screen", "screen": "input" })
+	# Aktualizacja ekranów: Wygrywający ma Input, rywal wait, reszta dalej wait
+	var winner_client_id = NetworkManager.get_client_id(player_id)
+	if winner_client_id != "":
+		NetworkManager.send_to_client(winner_client_id, { "type": "set_screen", "screen": "input" })
 	
 	for cid in NetworkManager.get_connected_clients():
-		if str(cid) != str(player_id):
-			NetworkManager.send_to_client(cid, { "type": "set_screen", "screen": "wait", "msg": "Przeciwnik zgłosił się pierwszy!" })
+		if cid != winner_client_id:
+			var msg = "Przeciwnik zgłosił się pierwszy!"
+			# Opcjonalnie inny komunikat dla obserwatorów
+			NetworkManager.send_to_client(cid, { "type": "set_screen", "screen": "wait", "msg": msg })
 
 
 # Główny router inputu, kieruje odpowiedź gracza do odpowiedniej podfunkcji w zależności od stanu rundy
@@ -115,6 +133,19 @@ func _handle_faceoff_answer(player_id, text, team_idx):
 	
 	var result = await q_manager.check_answer(text, current_question)
 	
+	# Znajdź ID przeciwnika (konkretny rywal w tym pojedynku, a nie losowy)
+	var opponent_id = -1
+	if player_id == faceoff_p1:
+		opponent_id = faceoff_p2
+	elif player_id == faceoff_p2:
+		opponent_id = faceoff_p1
+	else:
+		# Fallback gry awaryjnej (jeśli ID się nie zgadza)
+		var opponent_team = 1 if team_idx == 0 else 0
+		var opponent_members = t_manager.teams.get(opponent_team, [])
+		if opponent_members.size() > 0:
+			opponent_id = opponent_members[0]
+
 	if result:
 		var points = result["points"]
 		round_bank += points
@@ -132,8 +163,27 @@ func _handle_faceoff_answer(player_id, text, team_idx):
 			
 			_log_info("[%s] TRAFIENIE! '%s' (+%d). Ale to nie TOP..." % [_get_team_name(team_idx), result["text"], points])
 			_log_info("Szansa dla przeciwnika na przebicie wyniku!")
+			
+			if opponent_id != -1:
+				faceoff_active_player_id = opponent_id
+				var pid_client = NetworkManager.get_client_id(player_id)
+				var oid_client = NetworkManager.get_client_id(opponent_id)
+				if pid_client != "": NetworkManager.send_to_client(pid_client, { "type": "set_screen", "screen": "wait", "msg": "Przeciwnik ma szansę na przebicie..." })
+				if oid_client != "": NetworkManager.send_to_client(oid_client, { "type": "set_screen", "screen": "input" })
+				
 	else:
 		_log_info("[%s] PUDŁO w pojedynku! Szansa dla przeciwnika." % _get_team_name(team_idx))
+		
+		faceoff_pending_score = 0
+		faceoff_pending_team_idx = team_idx
+		faceoff_winner_id = -1
+		
+		if opponent_id != -1:
+			faceoff_active_player_id = opponent_id
+			var pid_client = NetworkManager.get_client_id(player_id)
+			var oid_client = NetworkManager.get_client_id(opponent_id)
+			if pid_client != "": NetworkManager.send_to_client(pid_client, { "type": "set_screen", "screen": "wait", "msg": "Pudło! Przeciwnik ma szansę..." })
+			if oid_client != "": NetworkManager.send_to_client(oid_client, { "type": "set_screen", "screen": "input" })
 
 # Obsługuje próbę przebicia w pojedynku przez drugiego gracza, po tym jak pierwszy trafił, ale nie TOP
 func _handle_faceoff_rebuttal(player_id, text, team_idx):
@@ -157,7 +207,23 @@ func _handle_faceoff_rebuttal(player_id, text, team_idx):
 			_win_faceoff(faceoff_winner_id, faceoff_pending_team_idx)
 	else:
 		_log_info("[%s] PUDŁO! Wygrywa zespół, który trafił cokolwiek." % _get_team_name(team_idx))
-		_win_faceoff(faceoff_winner_id, faceoff_pending_team_idx)
+		if faceoff_winner_id != -1:
+			_win_faceoff(faceoff_winner_id, faceoff_pending_team_idx)
+		else:
+			_log_info("Obaj spudłowali! Reset buzzera.")
+			faceoff_pending_score = -1
+			faceoff_pending_team_idx = -1
+			faceoff_active_player_id = -1
+			
+			var p1_str = str(faceoff_p1)
+			var p2_str = str(faceoff_p2)
+
+			for cid in NetworkManager.get_connected_clients():
+				var pid = NetworkManager.client_to_player_id.get(cid, -1)
+				if str(pid) == p1_str or str(pid) == p2_str:
+					NetworkManager.send_to_client(cid, { "type": "set_screen", "screen": "buzzer" })
+				else:
+					NetworkManager.send_to_client(cid, { "type": "set_screen", "screen": "wait", "msg": "Pojedynek (PONOWNIE)..." })
 
 # Kończy pojedynek, ustawia zwycięzcę i przechodzi do fazy DECISION (decyzji o grze)
 func _win_faceoff(winner_player_id, winner_team_idx):
@@ -172,6 +238,14 @@ func _win_faceoff(winner_player_id, winner_team_idx):
 	waiting_for_decision = true
 	current_substate = RoundState.DECISION
 	_log_info("[%s] WYGRANY POJEDYNEK! Decyzja (Gracz %d): [G]RAMY czy [O]DDAJEMY?" % [_get_team_name(winner_team_idx), winner_player_id])
+	
+	var winner_client_id = NetworkManager.get_client_id(winner_player_id)
+	if winner_client_id != "":
+		NetworkManager.send_to_client(winner_client_id, { "type": "set_screen", "screen": "decision" })
+	
+	for cid in NetworkManager.get_connected_clients():
+		if cid != winner_client_id:
+			NetworkManager.send_to_client(cid, { "type": "set_screen", "screen": "wait", "msg": "Przeciwnik podejmuje decyzję..." })
 
 # Obsługuje komendę gracza zwycięskiego w pojedynku (GRAMY lub ODDAJEMY)
 func _handle_decision(player_id: int, text: String):
@@ -195,7 +269,10 @@ func _start_team_play_phase():
 	# Dla uproszczenia: jeśli wygraliśmy faceoff, to active player już wstawia się w metodzie handle_input, 
 	# ale tutaj resetujemy indeks na 0 lub na konkretnego gracza.
 	# Ustawiamy na pierwszego gracza w liście drużyny.
-	current_member_index = 0
+	
+	# Startujemy od gracza następnego po tym, który brał udział w pojedynku (round_index)
+	# Jeśli drużyna ma np. 5 graczy, a jest runda 0 (faceoff grał P0), to zaczyna P1.
+	current_member_index = current_round_index + 1
 	_update_input_for_active_team_member()
 
 
@@ -205,17 +282,16 @@ func _update_input_for_active_team_member():
 	
 	current_member_index = current_member_index % team_members.size()
 	var active_player_id = team_members[current_member_index]
-	var active_id_str = str(active_player_id)
-	
-	var nick = "Gracz " + active_id_str # Możesz pobrać nick z GameManager jeśli masz dostęp
+	var active_client_id = NetworkManager.get_client_id(active_player_id)
 	
 	# 1. Wyślij INPUT do aktywnego gracza
-	NetworkManager.send_to_client(active_id_str, { "type": "set_screen", "screen": "input" })
+	if active_client_id != "":
+		NetworkManager.send_to_client(active_client_id, { "type": "set_screen", "screen": "input" })
 	
 	# 2. Wyślij WAIT do reszty
 	for client_id in NetworkManager.get_connected_clients():
-		if client_id != active_id_str:
-			var is_same_team = t_manager.get_player_team_index(int(client_id)) == playing_team
+		if client_id != active_client_id:
+			var is_same_team = t_manager.get_player_team_index(NetworkManager.client_to_player_id.get(client_id, -1)) == playing_team
 			var msg = "Twój kolega z drużyny odpowiada..." if is_same_team else "Druga drużyna odpowiada..."
 			NetworkManager.send_to_client(client_id, { "type": "set_screen", "screen": "wait", "msg": msg })
 
@@ -262,7 +338,8 @@ func _handle_strike(team_idx):
 	
 	# Wibracja dla wszystkich w drużynie
 	for m_id in t_manager.teams.get(team_idx, []):
-		NetworkManager.send_to_client(str(m_id), { "type": "vibrate" })
+		var cid = NetworkManager.get_client_id(m_id)
+		if cid != "": NetworkManager.send_to_client(cid, { "type": "vibrate" })
 
 	if strikes >= 3:
 		_trigger_steal()
@@ -280,12 +357,14 @@ func _trigger_steal():
 	# Wyślij input do wszystkich z drużyny przeciwnej (narada)
 	var stealing_members = t_manager.teams.get(playing_team, [])
 	for mid in stealing_members:
-		NetworkManager.send_to_client(str(mid), { "type": "set_screen", "screen": "input" })
+		var cid = NetworkManager.get_client_id(mid)
+		if cid != "": NetworkManager.send_to_client(cid, { "type": "set_screen", "screen": "input" })
 		
 	# Wyślij wait do drużyny która straciła
 	var waiting_team = 1 if playing_team == 0 else 0
 	for mid in t_manager.teams.get(waiting_team, []):
-		NetworkManager.send_to_client(str(mid), { "type": "set_screen", "screen": "wait", "msg": "Przeciwnicy naradzają się do przejęcia!" })
+		var cid = NetworkManager.get_client_id(mid)
+		if cid != "": NetworkManager.send_to_client(cid, { "type": "set_screen", "screen": "wait", "msg": "Przeciwnicy naradzają się do przejęcia!" })
 
 # Przetwarza odpowiedź drużyny próbującej kradzieży (STEAL), kończąc rundę sukcesem lub porażką
 func _process_steal_answer(text, team_idx):

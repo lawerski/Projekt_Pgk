@@ -51,12 +51,13 @@ func start_player(player_num):
 	_send_current_question()
 
 func _send_input_to_finalist(player_id_int):
-	var pid_str = str(player_id_int)
-	NetworkManager.send_to_client(pid_str, { "type": "set_screen", "screen": "input" })
+	var pid_client = NetworkManager.get_client_id(player_id_int)
+	if pid_client != "":
+		NetworkManager.send_to_client(pid_client, { "type": "set_screen", "screen": "input" })
 	
 	# Pozostałym wyślij wait
 	for cid in NetworkManager.get_connected_clients():
-		if str(cid) != pid_str:
+		if cid != pid_client:
 			NetworkManager.send_to_client(cid, { "type": "set_screen", "screen": "wait", "msg": "FINAŁ! Odpowiada finalista..." })
 
 # Obsługa czasu gry

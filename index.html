@@ -115,6 +115,12 @@
         <h2 id="question-text">Wpisz odpowiedź:</h2>
         <input type="text" id="game-answer-input" placeholder="..." autocomplete="off">
         <button class="btn" onclick="sendAnswer()">WYŚLIJ</button>
+        <button class="btn" style="background-color: #95a5a6; margin-top: 10px;" onclick="sendPass()">PASUJĘ (SKIP)</button>
+    </div>
+    <div id="screen-decision" class="screen">
+        <h2>Wygrana! Wybieraj:</h2>
+        <button class="btn" style="background:#27ae60; margin-bottom:10px;" onclick="sendDecision('play')">GRAMY</button>
+        <button class="btn" style="background:#e74c3c;" onclick="sendDecision('pass')">ODDAJEMY</button>
     </div>
     <div id="screen-buzzer" class="screen">
         <button class="btn" style="font-size:2rem; padding:40px;" onclick="sendBuzzer()">ZGŁASZAM SIĘ</button>
@@ -137,7 +143,7 @@
 
         // Przenosimy inicjalizację do DOMContentLoaded
         window.addEventListener('DOMContentLoaded', () => {
-            canvas = document.getElementById('drawing-canvas'); // Użyj poprawnego ID z HTML!
+            canvas = document.getElementById('drawing-canvas');
             if (!canvas) {
                 console.error("Nie znaleziono elementu drawing-canvas!");
                 return;
@@ -146,6 +152,9 @@
             
             const fileInput = document.getElementById('file-upload');
             let painting = false;
+
+            // Debug: sprawdź czy eventy się podpinają
+            console.log('Canvas inicjalizowany:', !!canvas);
 
             // Inicjalne tło
             ctx.fillStyle = "white";
@@ -175,31 +184,40 @@
                 });
             }
 
-            function startPosition(e) { painting = true; draw(e); }
-            function endPosition() { painting = false; ctx.beginPath(); }
+            function startPosition(e) {
+                painting = true;
+                console.log('startPosition', e.type);
+                draw(e);
+            }
+            function endPosition(e) {
+                painting = false;
+                ctx.beginPath();
+                console.log('endPosition', e ? e.type : '');
+            }
             function draw(e) {
                 if (!painting) return;
-                // Poprawka na współrzędne relatywne do canvas
-                e.preventDefault(); // Zablokuj scrollowanie
+                e.preventDefault();
                 let clientX = e.touches ? e.touches[0].clientX : e.clientX;
                 let clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                
                 const rect = canvas.getBoundingClientRect();
                 let x = clientX - rect.left;
                 let y = clientY - rect.top;
-
                 ctx.lineTo(x, y);
                 ctx.stroke();
                 ctx.beginPath();
                 ctx.moveTo(x, y);
+                // Debug: log współrzędne
+                // console.log('draw', x, y, painting);
             }
 
             canvas.addEventListener('mousedown', startPosition);
             canvas.addEventListener('mouseup', endPosition);
             canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseleave', endPosition);
             canvas.addEventListener('touchstart', startPosition, {passive: false});
             canvas.addEventListener('touchend', endPosition);
             canvas.addEventListener('touchmove', draw, {passive: false});
+            canvas.addEventListener('touchcancel', endPosition);
         });
 
         // Funkcje globalne (dostępne dla onclick w HTML)
@@ -299,6 +317,24 @@
             }
         }
 
+        window.sendPass = function() {
+            if(ws) {
+                ws.send(JSON.stringify({
+                    type: "player_answer",
+                    answer: "SKIP"
+                }));
+                const input = document.getElementById('game-answer-input');
+                if(input) input.value = "";
+            }
+        }
+
+        window.sendDecision = function(choice) {
+            if(ws) ws.send(JSON.stringify({
+                type: "player_answer",
+                answer: choice.toUpperCase() // 'PLAY' lub 'PASS' - backend to zinterpretuje jako decyzję
+            }));
+        }
+
         function handleServerMessage(msg) {
             if (msg.type === "join_error") {
                 alert("Pokój nie istnieje lub jest zamknięty.");
@@ -334,13 +370,19 @@
                     "wait": "screen-wait",
                     "lobby": "screen-lobby",
                     "team": "screen-team",
-                    "login": "screen-login"
+                    "login": "screen-login",
+                    "decision": "screen-decision"
                 };
                 let screenId = screenMap[msg.screen] || ("screen-" + msg.screen);
                 showScreen(screenId);
                 if (msg.screen === "wait" && msg.msg) {
                     const wm = document.getElementById('wait-msg');
                     if(wm) wm.innerText = msg.msg;
+                }
+            }
+            if (msg.type === "vibrate") {
+                if (navigator.vibrate) {
+                    navigator.vibrate(500); // Wibracja 500ms
                 }
             }
         }

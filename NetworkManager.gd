@@ -51,8 +51,17 @@ func _process(_delta):
 					emit_signal("host_registered", data.room)
 				"join_request":
 					var client_id = data.clientId
-					var team = int(data.player_info.team) # <-- ZAMIANA NA int
-					var player_id = data.player_info.player_id if data.player_info.has("player_id") else client_id.to_int()
+					var team = int(data.player_info.team)
+					# --- POPRAWKA ---
+					# Jeśli player_id nie jest podane, parsujemy clientId jako int, usuwając prefiks "C"
+					var player_id = 0
+					if data.player_info.has("player_id"):
+						player_id = data.player_info.player_id
+					else:
+						# "C123" -> 123
+						var id_str = client_id.replace("C", "")
+						player_id = id_str.to_int()
+
 					client_to_team[client_id] = team
 					client_to_player_id[client_id] = player_id
 					if not team_to_clients.has(team):
@@ -86,3 +95,9 @@ func send_to_client(client_id: String, json_data: Dictionary):
 	if ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
 		var pkt = { "targetId": client_id, "data": json_data }
 		ws.put_packet(JSON.stringify(pkt).to_utf8_buffer())
+
+func get_client_id(player_id: int) -> String:
+	for cid in client_to_player_id.keys():
+		if client_to_player_id[cid] == player_id:
+			return cid
+	return ""
