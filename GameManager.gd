@@ -55,7 +55,11 @@ func _ready():
 	# --- DODANE: Połączenie z serwerem i obsługa kodu pokoju ---
 	if not NetworkManager.is_connected("host_registered", Callable(self, "_on_room_code")):
 		NetworkManager.connect("host_registered", Callable(self, "_on_room_code"))
+	
+	if not NetworkManager.connected:
 		NetworkManager.connect_to_relay()
+	else:
+		print("[GameManager] Już połączono. Pomijam connect_to_relay.")
 	
 	# Podłączenie sygnałów sieciowych z NetworkManager
 	if not NetworkManager.is_connected("player_buzzer", Callable(self, "_on_player_buzzer")):
@@ -66,6 +70,69 @@ func _ready():
 	# Podłączenie sygnału wyboru drużyny
 	if not NetworkManager.is_connected("team_chosen", Callable(self, "_on_team_chosen")):
 		NetworkManager.connect("team_chosen", Callable(self, "_on_team_chosen"))
+
+	# --- SYNCHRONIZACJA Z NETWORK MANAGER ---
+	# Ponieważ w Lobby gracze już dołączyli, musimy pobrać ich stan do TeamListenra
+	print("[GameManager] Synchronizacja graczy z NetworkManager...")
+	print("  Dostępne ID klientów: ", NetworkManager.client_to_player_id.keys())
+	print("  Dostępne dane graczy: ", NetworkManager.players_data.keys())
+	
+	if NetworkManager.client_to_player_id.is_empty():
+		print("[GameManager] UWAGA: Brak graczy w NetworkManager! Dodaję graczy testowych jeśli jesteśmy w edytorze.")
+		# Opcjonalnie tutaj można wywołać setup_debug_game() jeśli testujemy bez serwera
+	
+	for cid in NetworkManager.client_to_player_id.keys():
+		var pid = NetworkManager.client_to_player_id[cid]
+		var team_idx = NetworkManager.client_to_team.get(cid, -1)
+		var p_info = NetworkManager.players_data.get(cid, {})
+		var nick = p_info.get("nickname", "Gracz %d" % pid)
+		
+		print("  Synchronizacja: ClientID=%s -> PlayerID=%d, Nick=%s, Team=%d" % [cid, pid, nick, team_idx])
+		
+		# Rejestracja w lokalnym słowniku
+		players[pid] = nick
+		
+		# Sprawdzamy i naprawiamy przypisanie do drużyny
+		var needs_update = false
+		var old_team = team_idx
+		
+		if team_idx == -1:
+			team_idx = pid % 2 # Automatyczne przypisanie (0 lub 1)
+			needs_update = true
+			print("    -> Brak drużyny. Auto-przypisanie do: ", team_idx)
+		
+		# Upewnijmy się, że NetworkManager ma spójne dane
+		if needs_update:
+			NetworkManager.client_to_team[cid] = team_idx
+			
+			# Usuń ze starej listy (np. -1)
+			if NetworkManager.team_to_clients.has(old_team):
+				NetworkManager.team_to_clients[old_team].erase(cid)
+				
+			# Dodaj do nowej listy
+			if not NetworkManager.team_to_clients.has(team_idx):
+				NetworkManager.team_to_clients[team_idx] = []
+			if not NetworkManager.team_to_clients[team_idx].has(cid):
+				NetworkManager.team_to_clients[team_idx].append(cid)
+			
+			# Powiadom UI (jeśli już nasłuchuje)
+			NetworkManager.emit_signal("team_chosen", cid, team_idx)
+		
+		# Jeszcze raz sprawdźmy czy jest w team_to_clients (dla pewności, nawet jak miał team)
+		if NetworkManager.team_to_clients.has(team_idx) and not NetworkManager.team_to_clients[team_idx].has(cid):
+			NetworkManager.team_to_clients[team_idx].append(cid)
+			
+		team_manager.set_player_team(pid, team_idx)
+	
+	team_manager.assign_captains()
+	print("Stan TeamManager po synchronizacji:")
+	print("  Team 0: ", team_manager.teams[0])
+	print("  Team 1: ", team_manager.teams[1])
+
+	# Automatyczny start gry po załadowaniu sceny
+	print("[GameManager] Rozpoczynanie gry za 1 sekundę...")
+	await get_tree().create_timer(1.0).timeout
+	start_next_round()
 
 func _on_room_code(code):
 	print("KOD POKOJU (GameManager): ", code)
@@ -146,9 +213,11 @@ func _input(event):
 	if not event is InputEventKey or not event.pressed:
 		return
 
-	# START GRY / RUNDY
-	if event.keycode == KEY_SPACE:
-		start_next_round()
+	# USUNIĘTO OBSŁUGĘ SPACJI DO STARTU RUNDY
+	
+	# Menu wyjścia (ESC)
+	if event.keycode == KEY_ESCAPE:
+		_show_exit_confirmation()
 		return
 
 	var text_input = ""
@@ -189,11 +258,69 @@ func _on_round_state_change(new_state_name):
 		await get_tree().create_timer(3.0).timeout
 		start_next_round()
 
+func _perform_game_reset():
+	# Zapisz listę klientów PRZED wyczyszczeniem struktur danych!
+	var connected_clients = NetworkManager.get_connected_clients()
+
+	# Resetuj stan graczy - usuń przypisania do drużyn w NetworkManager
+	NetworkManager.client_to_team.clear()
+	NetworkManager.team_to_clients = { 0: [], 1: [] }
+	
+	# Resetuj stan gry i drużyn
+	team_manager.reset_state()
+	current_state = GameState.LOBBY
+	round_counter = 0
+	strikes = 0
+	temp_score = 0
+	
+	# Resetuj klientów
+	for cid in connected_clients:
+		NetworkManager.send_to_client(cid, { "type": "join_accepted", "is_vip": false })
+
 func _on_final_end(score, won):
 	if won:
 		print(">>> [KONIEC GRY]: WYGRANA! Zdobyto 200 pkt w finale!")
 	else:
 		print(">>> [KONIEC GRY]: Przegrana. Wynik finału: " + str(score))
+	
+	# Automatyczny powrót do lobby
+	print("[GAME] Powrót do Lobby za 10 sekund...")
+	NetworkManager.send_to_all({"type": "set_screen", "screen": "end", "won": won, "score": score})
+	await get_tree().create_timer(10.0).timeout
+	
+	_perform_game_reset()
+	
+	# Zmiana sceny DOPIERO PO WYSŁANIU KOMUNIKATÓW
+	await get_tree().create_timer(0.5).timeout
+	get_tree().change_scene_to_file("res://Lobby.tscn")
+	
+func _show_exit_confirmation():
+	# Sprawdź czy dialog już istnieje
+	if get_node_or_null("ExitDialog"):
+		return
+		
+	var dialog = ConfirmationDialog.new()
+	dialog.name = "ExitDialog"
+	dialog.title = "Wyjście"
+	dialog.dialog_text = "Czy na pewno chcesz wrócić do menu głównego?\nGra zostanie przerwana."
+	dialog.get_ok_button().text = "Tak"
+	dialog.get_cancel_button().text = "Anuluj"
+	dialog.initial_position = Window.WINDOW_INITIAL_POSITION_CENTER_PRIMARY_SCREEN
+	
+	add_child(dialog)
+	dialog.confirmed.connect(_on_exit_confirmed)
+	dialog.canceled.connect(func(): dialog.queue_free())
+	dialog.popup()
+
+func _on_exit_confirmed():
+	# Usuń dialog
+	if get_node_or_null("ExitDialog"):
+		get_node("ExitDialog").queue_free()
+		
+	print(">>> [GAME] Wymuszone wyjście do lobby.")
+	_perform_game_reset()
+	await get_tree().create_timer(0.5).timeout
+	get_tree().change_scene_to_file("res://Lobby.tscn")
 
 # --- FUNKCJE DEBUGUJĄCE (WYPISYWANIE W KONSOLI) ---
 

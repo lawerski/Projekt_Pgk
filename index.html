@@ -105,6 +105,12 @@
         <button class="btn" style="background:#f1c40f;color:#222;" onclick="chooseTeam(1)">Drużyna B</button>
         <div id="team-status"></div>
     </div>
+    <div id="screen-team-name" class="screen">
+        <h2>Nazwij swoją drużynę</h2>
+        <p>Jesteś kapitanem!</p>
+        <input type="text" id="input-team-name" placeholder="Nazwa Drużyny" maxlength="15">
+        <button class="btn" onclick="sendTeamName()">ZATWIERDŹ</button>
+    </div>
     <div id="screen-lobby" class="screen">
         <h2>Czekamy na start...</h2>
         <img id="lobby-avatar-img" src="" alt="Twój avatar">
@@ -127,6 +133,12 @@
     </div>
     <div id="screen-wait" class="screen">
         <h2 id="wait-msg">Czekaj na swoją kolej...</h2>
+    </div>
+    <div id="screen-end" class="screen">
+        <h1 id="end-title">KONIEC GRY</h1>
+        <h2 id="end-msg">...</h2>
+        <h3 id="end-score">Wynik: 0</h3>
+        <button class="btn" style="background: #333;" onclick="location.reload()">WYJDŹ</button>
     </div>
     <div id="status-bar">Niepołączony</div>
     <script>
@@ -156,9 +168,10 @@
             // Debug: sprawdź czy eventy się podpinają
             console.log('Canvas inicjalizowany:', !!canvas);
 
-            // Inicjalne tło
-            ctx.fillStyle = "white";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // ZMIANA: Usuwamy inicjalne malowanie na biało, aby tło było przezroczyste
+            // ctx.fillStyle = "white";
+            // ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
             ctx.lineWidth = 5;
             ctx.lineCap = 'round';
             ctx.strokeStyle = 'black';
@@ -218,6 +231,16 @@
             canvas.addEventListener('touchend', endPosition);
             canvas.addEventListener('touchmove', draw, {passive: false});
             canvas.addEventListener('touchcancel', endPosition);
+
+            // Enter key support for answer input
+            const answerInput = document.getElementById('game-answer-input');
+            if(answerInput) {
+                answerInput.addEventListener('keydown', (e) => {
+                    if(e.key === 'Enter') {
+                        sendAnswer();
+                    }
+                });
+            }
         });
 
         // Funkcje globalne (dostępne dla onclick w HTML)
@@ -230,14 +253,24 @@
 
         window.clearCanvas = function() {
             if(!ctx) return;
-            ctx.fillStyle = "white";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // ZMIANA: Zamiast malować na biało, czyścimy piksele do przezroczystości
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
 
         window.showScreen = function(screenId) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             const screen = document.getElementById(screenId);
-            if(screen) screen.classList.add('active');
+            if(screen) {
+                screen.classList.add('active');
+                
+                // RESTORE ROOM CODE if exists when showing login screen
+                if(screenId === 'screen-login' && window.lastRoomCode) {
+                    const roomInput = document.getElementById('input-room');
+                    if(roomInput && !roomInput.value) {
+                        roomInput.value = window.lastRoomCode;
+                    }
+                }
+            }
         }
 
         window.chooseTeam = function(teamIdx) {
@@ -258,7 +291,9 @@
             const statusEl = document.getElementById('status-bar');
 
             const nick = nickInput.value;
-            const room = roomInput.value.toUpperCase();
+            // Zapamiętaj kod w zmiennej globalnej aby nie zniknął przy resecie
+            window.lastRoomCode = roomInput.value.toUpperCase(); 
+            const room = window.lastRoomCode;
 
             if (!nick || !room) { alert("Wpisz nick i kod!"); return; }
             
@@ -267,6 +302,19 @@
             
             if(statusEl) statusEl.innerText = "Łączenie...";
             
+             // Jeśli WebSocket już istnieje i jest otwarty, nie twórz nowego, tylko wyślij join_request ponownie
+            if(ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: "join_request",
+                    room: room,
+                    name: playerNick,
+                    avatar: avatarData,
+                    team: -1
+                }));
+                 if(statusEl) statusEl.innerText = "Ponowne dołączanie...";
+                return;
+            }
+
             try {
                 ws = new WebSocket(SERVER_URL);
             } catch(e) {
@@ -335,18 +383,43 @@
             }));
         }
 
+        window.sendTeamName = function() {
+            const input = document.getElementById('input-team-name');
+            const name = input.value;
+            if(name && ws) {
+                ws.send(JSON.stringify({
+                    type: "team_name",
+                    name: name
+                }));
+                showScreen('screen-lobby');
+            }
+        }
+
         function handleServerMessage(msg) {
             if (msg.type === "join_error") {
                 alert("Pokój nie istnieje lub jest zamknięty.");
                 ws.close();
                 return;
             }
+            if (msg.type === "request_team_name") {
+                showScreen('screen-team-name');
+                return;
+            }
             if (msg.type === "join_accepted") {
                 isVip = !!msg.is_vip;
-                const img = document.getElementById('lobby-avatar-img');
-                if(img) img.src = canvas.toDataURL();
+                teamChosen = false; // Reset wyboru drużyny
+                // Jeśli canvas jest czysty (bo gra zrestartowana), to nie nadpisuj avatara pustym
+                // Jeśli gracz był już w grze, ma nick i avatar w pamięci
+                if(canvas) {
+                     const img = document.getElementById('lobby-avatar-img');
+                     if(img) img.src = canvas.toDataURL();
+                }
                 const nickEl = document.getElementById('lobby-nick');
                 if(nickEl) nickEl.innerText = playerNick;
+                
+                // Reset UI elements state
+                document.getElementById('team-status').innerText = "";
+                
                 showScreen('screen-team');
             }
             if (msg.type === "team_confirmed") {
@@ -371,13 +444,25 @@
                     "lobby": "screen-lobby",
                     "team": "screen-team",
                     "login": "screen-login",
-                    "decision": "screen-decision"
+                    "decision": "screen-decision",
+                    "end": "screen-end"
                 };
                 let screenId = screenMap[msg.screen] || ("screen-" + msg.screen);
                 showScreen(screenId);
                 if (msg.screen === "wait" && msg.msg) {
                     const wm = document.getElementById('wait-msg');
                     if(wm) wm.innerText = msg.msg;
+                }
+                if (msg.screen === "end") {
+                    const title = document.getElementById('end-title');
+                    const message = document.getElementById('end-msg');
+                    const score = document.getElementById('end-score');
+                    
+                    if(title) title.innerText = msg.won ? "WYGRANA!" : "KONIEC GRY";
+                    if(title) title.style.color = msg.won ? "#2ecc71" : "#e74c3c";
+                    
+                    if(message) message.innerText = msg.won ? "Gratulacje! Zdobyto główną nagrodę!" : "Niestety, zabrakło punktów.";
+                    if(score) score.innerText = "Wynik końcowy: " + msg.score + " pkt";
                 }
             }
             if (msg.type === "vibrate") {

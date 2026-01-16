@@ -1,0 +1,137 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://Lobby.gd" id="1_script"]
+
+[sub_resource type="Gradient" id="Gradient_lobby"]
+colors = PackedColorArray(0.2, 0.1, 0.4, 1, 0.1, 0.05, 0.2, 1)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_lobby"]
+gradient = SubResource("Gradient_lobby")
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_start"]
+bg_color = Color(0, 0.6, 0.2, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[node name="Lobby" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="Background" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = SubResource("GradientTexture2D_lobby")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 100.0
+offset_top = 50.0
+offset_right = -100.0
+offset_bottom = -50.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 30
+
+[node name="Title" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 64
+text = "LOBBY"
+horizontal_alignment = 1
+
+[node name="InfoHBox" type="HBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="Label" type="Label" parent="VBoxContainer/InfoHBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.8, 0.8, 1)
+theme_override_font_sizes/font_size = 32
+text = "KOD POKOJU: "
+
+[node name="RoomCodeLabel" type="Label" parent="VBoxContainer/InfoHBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.8, 0.2, 1)
+theme_override_font_sizes/font_size = 48
+text = "..."
+
+[node name="PlayersTitle" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Dołączeni Gracze:"
+horizontal_alignment = 1
+
+[node name="TeamsSplit" type="HBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 20
+
+[node name="TeamA" type="VBoxContainer" parent="VBoxContainer/TeamsSplit"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Header" type="PanelContainer" parent="VBoxContainer/TeamsSplit/TeamA"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_btn_start")
+
+[node name="Label" type="Label" parent="VBoxContainer/TeamsSplit/TeamA/Header"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "DRUŻYNA A"
+horizontal_alignment = 1
+
+[node name="Scroll" type="ScrollContainer" parent="VBoxContainer/TeamsSplit/TeamA"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Container" type="HFlowContainer" parent="VBoxContainer/TeamsSplit/TeamA/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 10
+
+[node name="TeamB" type="VBoxContainer" parent="VBoxContainer/TeamsSplit"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Header" type="PanelContainer" parent="VBoxContainer/TeamsSplit/TeamB"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_btn_start")
+
+[node name="Label" type="Label" parent="VBoxContainer/TeamsSplit/TeamB/Header"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "DRUŻYNA B"
+horizontal_alignment = 1
+
+[node name="Scroll" type="ScrollContainer" parent="VBoxContainer/TeamsSplit/TeamB"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Container" type="HFlowContainer" parent="VBoxContainer/TeamsSplit/TeamB/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 10
+
+[node name="StartGameButton" type="Button" parent="VBoxContainer"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+theme_override_font_sizes/font_size = 48
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_start")
+text = "ROZPOCZNIJ GRĘ"

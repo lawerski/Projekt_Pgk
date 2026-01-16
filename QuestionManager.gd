@@ -58,6 +58,15 @@ func reset_question_state(question: Dictionary):
 		for ans in question["answers"]:
 			ans["revealed"] = false
 
+# Zwraca listę tekstów odpowiedzi, które zostały już odkryte
+func get_revealed_answers(question_data: Dictionary) -> Array:
+	var revealed_texts = []
+	if question_data.has("answers"):
+		for ans in question_data["answers"]:
+			if ans.get("revealed", false):
+				revealed_texts.append(ans["text"])
+	return revealed_texts
+
 # Funkcja startowa silnika Godot, inicjalizuje menedżera i wczytuje pytania przy starcie
 func _ready():
 	print("[QuestionManager] Inicjalizacja (Tryb Lokalny - Synonimy)...")

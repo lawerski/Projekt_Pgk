@@ -1,12 +1,19 @@
-[gd_scene load_steps=6 format=3 uid="uid://01w6f6nt85mm"]
+[gd_scene load_steps=7 format=3 uid="uid://01w6f6nt85mm"]
 
 [ext_resource type="Script" uid="uid://bw1exo26x68gx" path="res://GameManager.gd" id="1_glv2v"]
 [ext_resource type="Script" uid="uid://em1bjoe43q31" path="res://TeamManager.gd" id="1_uu6xs"]
 [ext_resource type="Script" uid="uid://x8afkofruxuu" path="res://FinalManager.gd" id="2_r0du0"]
 [ext_resource type="Script" uid="uid://r55wkwd88nfr" path="res://QuestionManager.gd" id="2_uu6xs"]
 [ext_resource type="Script" uid="uid://clxknhjbp1snt" path="res://RoundManager.gd" id="4_fos0i"]
+[ext_resource type="PackedScene" path="res://GameUI.tscn" id="6_ui"]
 
-[node name="Main" type="Node2D"]
+[node name="Main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 
 [node name="GameManager" type="Node" parent="."]
 script = ExtResource("1_glv2v")
@@ -22,3 +29,6 @@ script = ExtResource("4_fos0i")
 
 [node name="TeamManager" type="Node" parent="GameManager"]
 script = ExtResource("1_uu6xs")
+
+[node name="GameUI" parent="." instance=ExtResource("6_ui")]
+layout_mode = 1

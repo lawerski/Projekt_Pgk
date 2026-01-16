@@ -168,5 +168,891 @@
 				"synonyms": ["krzyk", "boimy się", "przeklinamy"]
 			}
 		]
+	},
+	{
+		"id": 6,
+		"question": "Więcej niż jedno zwierzę to...",
+		"answers": [
+			{
+				"text": "Stado",
+				"points": 35,
+				"synonyms": ["stada", "grupa"]
+			},
+			{
+				"text": "Ławica",
+				"points": 25,
+				"synonyms": ["lawica", "ławice"]
+			},
+			{
+				"text": "Wataha",
+				"points": 15,
+				"synonyms": ["wilki", "sfora"]
+			},
+			{
+				"text": "Klucz",
+				"points": 10,
+				"synonyms": ["ptaki", "klucze"]
+			},
+			{
+				"text": "Trzoda",
+				"points": 10,
+				"synonyms": ["chlewna", "świnie"]
+			},
+			{
+				"text": "Owczarnia",
+				"points": 5,
+				"synonyms": ["owce", "lama"]
+			}
+		]
+	},
+	{
+		"id": 7,
+		"question": "Jaki przedmiot szkolny mieści się w piórniku?",
+		"answers": [
+			{
+				"text": "Długopis",
+				"points": 35,
+				"synonyms": ["pisak", "mazak"]
+			},
+			{
+				"text": "Ołówek",
+				"points": 25,
+				"synonyms": ["ołóweczek"]
+			},
+			{
+				"text": "Gumka",
+				"points": 15,
+				"synonyms": ["gumka do mazania", "ścieraczka"]
+			},
+			{
+				"text": "Linijka",
+				"points": 10,
+				"synonyms": ["liniał", "ekierka"]
+			},
+			{
+				"text": "Temperówka",
+				"points": 10,
+				"synonyms": ["strugaczka", "ostrzyni"]
+			},
+			{
+				"text": "Korektor",
+				"points": 5,
+				"synonyms": ["zamazik"]
+			}
+		]
+	},
+	{
+		"id": 8,
+		"question": "Co można robić w górach?",
+		"answers": [
+			{
+				"text": "Chodzić",
+				"points": 40,
+				"synonyms": ["wędrówki", "spacerować", "zwiedzać", "wędrować"]
+			},
+			{
+				"text": "Jeździć na nartach",
+				"points": 30,
+				"synonyms": ["narty", "snowboard", "zjeżdżać"]
+			},
+			{
+				"text": "Wspinać się",
+				"points": 15,
+				"synonyms": ["wspinaczka", "alpinizm"]
+			},
+			{
+				"text": "Podziwiać widoki",
+				"points": 10,
+				"synonyms": ["patrzeć", "zdjęcia", "fotografować"]
+			},
+			{
+				"text": "Jeść oscypki",
+				"points": 5,
+				"synonyms": ["oscypek", "jeść", "pić grzańca"]
+			}
+		]
+	},
+	{
+		"id": 9,
+		"question": "Część ciała, która jest parzysta.",
+		"answers": [
+			{
+				"text": "Oczy",
+				"points": 35,
+				"synonyms": ["oko", "gałki oczne"]
+			},
+			{
+				"text": "Uszy",
+				"points": 25,
+				"synonyms": ["ucho", "małżowiny"]
+			},
+			{
+				"text": "Ręce",
+				"points": 20,
+				"synonyms": ["ręka", "dłonie", "ramiona"]
+			},
+			{
+				"text": "Nogi",
+				"points": 15,
+				"synonyms": ["noga", "stopy", "kolana"]
+			},
+			{
+				"text": "Płuca",
+				"points": 5,
+				"synonyms": ["płuco", "nerki", "nerka"]
+			}
+		]
+	},
+	{
+		"id": 10,
+		"question": "Co znajdziemy w łazience?",
+		"answers": [
+			{
+				"text": "Wanna",
+				"points": 30,
+				"synonyms": ["kąpiel", "prysznic", "kabina"]
+			},
+			{
+				"text": "Umywalka",
+				"points": 25,
+				"synonyms": ["zlew", "kran"]
+			},
+			{
+				"text": "Lustro",
+				"points": 20,
+				"synonyms": ["zwierciadło"]
+			},
+			{
+				"text": "Ręcznik",
+				"points": 15,
+				"synonyms": ["ręczniki"]
+			},
+			{
+				"text": "Mydło",
+				"points": 5,
+				"synonyms": ["żel", "szampon", "kosmetyki"]
+			},
+			{
+				"text": "Toaleta",
+				"points": 5,
+				"synonyms": ["wc", "sedes", "kibel"]
+			}
+		]
+	},
+	{
+		"id": 11,
+		"question": "Instrument strunowy.",
+		"answers": [
+			{
+				"text": "Gitara",
+				"points": 40,
+				"synonyms": ["elektryczna", "akustyczna", "basowa"]
+			},
+			{
+				"text": "Skrzypce",
+				"points": 25,
+				"synonyms": ["skrzypki"]
+			},
+			{
+				"text": "Harfa",
+				"points": 15,
+				"synonyms": []
+			},
+			{
+				"text": "Fortepian",
+				"points": 10,
+				"synonyms": ["pianino", "klawisz"]
+			},
+			{
+				"text": "Wiolonczela",
+				"points": 5,
+				"synonyms": ["wiola"]
+			},
+			{
+				"text": "Kontrabas",
+				"points": 5,
+				"synonyms": ["bas"]
+			}
+		]
+	},
+	{
+		"id": 12,
+		"question": "Prezent na walentynki.",
+		"answers": [
+			{
+				"text": "Kwiaty",
+				"points": 35,
+				"synonyms": ["róże", "bukiet"]
+			},
+			{
+				"text": "Czekoladki",
+				"points": 25,
+				"synonyms": ["słodycze", "bombonierka"]
+			},
+			{
+				"text": "Biżuteria",
+				"points": 15,
+				"synonyms": ["pierścionek", "naszyjnik"]
+			},
+			{
+				"text": "Kolacja",
+				"points": 10,
+				"synonyms": ["randka", "restauracja"]
+			},
+			{
+				"text": "Perfumy",
+				"points": 10,
+				"synonyms": ["zapach", "woda toaletowa"]
+			},
+			{
+				"text": "Miś",
+				"points": 5,
+				"synonyms": ["maskotka", "pluszak"]
+			}
+		]
+	},
+	{
+		"id": 13,
+		"question": "Co można znaleźć w portfelu?",
+		"answers": [
+			{
+				"text": "Pieniądze",
+				"points": 40,
+				"synonyms": ["gotówka", "banknoty", "monety", "bilon", "kasa"]
+			},
+			{
+				"text": "Karty płatnicze",
+				"points": 25,
+				"synonyms": ["karta", "kredytowa", "debetowa"]
+			},
+			{
+				"text": "Dowód osobisty",
+				"points": 15,
+				"synonyms": ["dowód", "dokumenty"]
+			},
+			{
+				"text": "Zdjęcia",
+				"points": 10,
+				"synonyms": ["fotki", "fotografie", "zdjęcie rodziny"]
+			},
+			{
+				"text": "Paragony",
+				"points": 5,
+				"synonyms": ["rachunki", "kwitki"]
+			},
+			{
+				"text": "Wizytówki",
+				"points": 5,
+				"synonyms": ["wizytówka"]
+			}
+		]
+	},
+	{
+		"id": 14,
+		"question": "Co dodajemy do kawy?",
+		"answers": [
+			{
+				"text": "Cukier",
+				"points": 35,
+				"synonyms": ["słodzik", "kostka", "słodzić"]
+			},
+			{
+				"text": "Mleko",
+				"points": 30,
+				"synonyms": ["śmietanka", "mleczko"]
+			},
+			{
+				"text": "Woda",
+				"points": 15,
+				"synonyms": ["wrzątek"]
+			},
+			{
+				"text": "Lody",
+				"points": 10,
+				"synonyms": ["gałka lodów"]
+			},
+			{
+				"text": "Alkohol",
+				"points": 5,
+				"synonyms": ["rum", "whisky", "wkładka"]
+			},
+			{
+				"text": "Cynamon",
+				"points": 5,
+				"synonyms": ["przyprawy"]
+			}
+		]
+	},
+	{
+		"id": 15,
+		"question": "Zwierzę hodowane na wsi.",
+		"answers": [
+			{
+				"text": "Krowa",
+				"points": 35,
+				"synonyms": ["bydło", "krówka"]
+			},
+			{
+				"text": "Świnia",
+				"points": 25,
+				"synonyms": ["trzoda", "prosiak", "wieprz"]
+			},
+			{
+				"text": "Kura",
+				"points": 20,
+				"synonyms": ["drób", "kogut", "kurczak"]
+			},
+			{
+				"text": "Koń",
+				"points": 10,
+				"synonyms": ["konie", "ogier", "klacz"]
+			},
+			{
+				"text": "Pies",
+				"points": 5,
+				"synonyms": ["burek", "piesek"]
+			},
+			{
+				"text": "Owca",
+				"points": 5,
+				"synonyms": ["baranek", "owce"]
+			}
+		]
+	},
+	{
+		"id": 16,
+		"question": "Co zabieramy na plażę?",
+		"answers": [
+			{
+				"text": "Ręcznik",
+				"points": 30,
+				"synonyms": ["koc"]
+			},
+			{
+				"text": "Krem do opalania",
+				"points": 25,
+				"synonyms": ["olejek", "filtr", "krem"]
+			},
+			{
+				"text": "Strój kąpielowy",
+				"points": 20,
+				"synonyms": ["kąpielówki", "bikini"]
+			},
+			{
+				"text": "Okulary przeciwsłoneczne",
+				"points": 10,
+				"synonyms": ["okulary"]
+			},
+			{
+				"text": "Parawan",
+				"points": 10,
+				"synonyms": ["osłona"]
+			},
+			{
+				"text": "Woda",
+				"points": 5,
+				"synonyms": ["picie", "napój"]
+			}
+		]
+	},
+	{
+		"id": 17,
+		"question": "Rodzaj zupy.",
+		"answers": [
+			{
+				"text": "Pomidorowa",
+				"points": 35,
+				"synonyms": ["z pomidorów", "pomidorówka"]
+			},
+			{
+				"text": "Rosół",
+				"points": 30,
+				"synonyms": ["z kury"]
+			},
+			{
+				"text": "Ogórkowa",
+				"points": 15,
+				"synonyms": ["kiszona"]
+			},
+			{
+				"text": "Żurek",
+				"points": 10,
+				"synonyms": ["barszcz biały"]
+			},
+			{
+				"text": "Barszcz czerwony",
+				"points": 5,
+				"synonyms": ["barszcz", "wigilijny"]
+			},
+			{
+				"text": "Grochowa",
+				"points": 5,
+				"synonyms": ["z grochu", "wojskowa"]
+			}
+		]
+	},
+	{
+		"id": 18,
+		"question": "Co można robić w wolnym czasie?",
+		"answers": [
+			{
+				"text": "Oglądać TV",
+				"points": 30,
+				"synonyms": ["telewizja", "seriale", "filmy", "netflix"]
+			},
+			{
+				"text": "Czytać",
+				"points": 25,
+				"synonyms": ["książki", "czytanie"]
+			},
+			{
+				"text": "Spać",
+				"points": 20,
+				"synonyms": ["drzemka", "odpoczywać", "nic"]
+			},
+			{
+				"text": "Grać",
+				"points": 10,
+				"synonyms": ["komputer", "konsola", "gry"]
+			},
+			{
+				"text": "Spacerować",
+				"points": 10,
+				"synonyms": ["spacer", "chodzić"]
+			},
+			{
+				"text": "Spotykać się ze znajomymi",
+				"points": 5,
+				"synonyms": ["impreza", "piwo", "znajomi"]
+			}
+		]
+	},
+	{
+		"id": 19,
+		"question": "Co kojarzy się z zimą?",
+		"answers": [
+			{
+				"text": "Śnieg",
+				"points": 45,
+				"synonyms": ["biało", "opady", "puch"]
+			},
+			{
+				"text": "Zimno",
+				"points": 25,
+				"synonyms": ["mróz", "chlód", "temperatura"]
+			},
+			{
+				"text": "Święta",
+				"points": 10,
+				"synonyms": ["Boże Narodzenie", "gwiazdka", "choinka"]
+			},
+			{
+				"text": "Narty",
+				"points": 10,
+				"synonyms": ["sanki", "łyżwy", "sporty zimowe"]
+			},
+			{
+				"text": "Bałwan",
+				"points": 5,
+				"synonyms": ["lepienie bałwana"]
+			},
+			{
+				"text": "Ferie",
+				"points": 5,
+				"synonyms": ["wakacje zimowe", "wolne"]
+			}
+		]
+	},
+	{
+		"id": 20,
+		"question": "Marka samochodu.",
+		"answers": [
+			{
+				"text": "Fiat",
+				"points": 25,
+				"synonyms": ["maluch"]
+			},
+			{
+				"text": "BMW",
+				"points": 20,
+				"synonyms": ["bmka", "beta"]
+			},
+			{
+				"text": "Mercedes",
+				"points": 15,
+				"synonyms": ["mesio"]
+			},
+			{
+				"text": "Audi",
+				"points": 15,
+				"synonyms": ["cztery pierścienie"]
+			},
+			{
+				"text": "Volkswagen",
+				"points": 15,
+				"synonyms": ["volks", "golf", "passat", "vw"]
+			},
+			{
+				"text": "Toyota",
+				"points": 10,
+				"synonyms": ["yaris"]
+			}
+		]
+	},
+	{
+		"id": 21,
+		"question": "Co można kupić w aptece?",
+		"answers": [
+			{
+				"text": "Leki",
+				"points": 40,
+				"synonyms": ["lekarstwa", "tabletki", "pigułki"]
+			},
+			{
+				"text": "Witaminy",
+				"points": 20,
+				"synonyms": ["suplementy"]
+			},
+			{
+				"text": "Plastry",
+				"points": 15,
+				"synonyms": ["opatrunki"]
+			},
+			{
+				"text": "Syrop",
+				"points": 10,
+				"synonyms": ["na kaszel"]
+			},
+			{
+				"text": "Kosmetyki",
+				"points": 10,
+				"synonyms": ["kremy", "szampony"]
+			},
+			{
+				"text": "Test ciążowy",
+				"points": 5,
+				"synonyms": ["test"]
+			}
+		]
+	},
+	{
+		"id": 22,
+		"question": "Owoc cytrusowy.",
+		"answers": [
+			{
+				"text": "Cytryna",
+				"points": 35,
+				"synonyms": ["kwaśna"]
+			},
+			{
+				"text": "Pomarańcza",
+				"points": 30,
+				"synonyms": ["pomarańcz"]
+			},
+			{
+				"text": "Mandarynka",
+				"points": 20,
+				"synonyms": ["świąteczny"]
+			},
+			{
+				"text": "Grejpfrut",
+				"points": 10,
+				"synonyms": ["gorzki"]
+			},
+			{
+				"text": "Limonka",
+				"points": 5,
+				"synonyms": ["limonka"]
+			}
+		]
+	},
+	{
+		"id": 23,
+		"question": "Co robimy przed snem?",
+		"answers": [
+			{
+				"text": "Myjemy zęby",
+				"points": 35,
+				"synonyms": ["szczotkowanie", "mycie zębów"]
+			},
+			{
+				"text": "Bierzemy prysznic",
+				"points": 25,
+				"synonyms": ["kąpiel", "myjemy się"]
+			},
+			{
+				"text": "Przebieramy się",
+				"points": 15,
+				"synonyms": ["zakładamy piżamę", "piżama"]
+			},
+			{
+				"text": "Siedzimy na telefonie",
+				"points": 15,
+				"synonyms": ["przeglądamy internet", "telefon", "komórka"]
+			},
+			{
+				"text": "Gasimy światło",
+				"points": 5,
+				"synonyms": ["ciemność"]
+			},
+			{
+				"text": "Modlimy się",
+				"points": 5,
+				"synonyms": ["pacierz"]
+			}
+		]
+	},
+	{
+		"id": 24,
+		"question": "Co jest słodkie?",
+		"answers": [
+			{
+				"text": "Cukier",
+				"points": 40,
+				"synonyms": ["słodzik"]
+			},
+			{
+				"text": "Czekolada",
+				"points": 25,
+				"synonyms": ["baton"]
+			},
+			{
+				"text": "Miód",
+				"points": 15,
+				"synonyms": ["pszczeli"]
+			},
+			{
+				"text": "Cukierki",
+				"points": 10,
+				"synonyms": ["landrynki"]
+			},
+			{
+				"text": "Ciasto",
+				"points": 5,
+				"synonyms": ["tort", "wypieki"]
+			},
+			{
+				"text": "Owoce",
+				"points": 5,
+				"synonyms": ["truskawki", "banany"]
+			}
+		]
+	},
+	{
+		"id": 25,
+		"question": "Co ma klamkę?",
+		"answers": [
+			{
+				"text": "Drzwi",
+				"points": 50,
+				"synonyms": ["wrota", "wejście"]
+			},
+			{
+				"text": "Okno",
+				"points": 30,
+				"synonyms": ["okiennica"]
+			},
+			{
+				"text": "Samochód",
+				"points": 10,
+				"synonyms": ["auto", "pojazd"]
+			},
+			{
+				"text": "Szafa",
+				"points": 5,
+				"synonyms": ["meble"]
+			},
+			{
+				"text": "Furtka",
+				"points": 5,
+				"synonyms": ["bramka"]
+			}
+		]
+	},
+	{
+		"id": 26,
+		"question": "Co można otwierać?",
+		"answers": [
+			{
+				"text": "Drzwi",
+				"points": 35,
+				"synonyms": ["wrota"]
+			},
+			{
+				"text": "Okno",
+				"points": 25,
+				"synonyms": ["lufcik"]
+			},
+			{
+				"text": "Oczy",
+				"points": 15,
+				"synonyms": ["powieki"]
+			},
+			{
+				"text": "Puszkę",
+				"points": 10,
+				"synonyms": ["konserwę", "słoik", "butelkę"]
+			},
+			{
+				"text": "Prezent",
+				"points": 10,
+				"synonyms": ["paczkę"]
+			},
+			{
+				"text": "Usta",
+				"points": 5,
+				"synonyms": ["buzię", "dzób"]
+			}
+		]
+	},
+	{
+		"id": 27,
+		"question": "Co nosimy zimą?",
+		"answers": [
+			{
+				"text": "Kurtkę",
+				"points": 30,
+				"synonyms": ["płaszcz", "kożuch"]
+			},
+			{
+				"text": "Czapkę",
+				"points": 25,
+				"synonyms": ["nakrycie głowy"]
+			},
+			{
+				"text": "Szalik",
+				"points": 20,
+				"synonyms": ["szal"]
+			},
+			{
+				"text": "Rękawiczki",
+				"points": 15,
+				"synonyms": ["rękawice"]
+			},
+			{
+				"text": "Buty zimowe",
+				"points": 10,
+				"synonyms": ["kozaki", "trapery"]
+			}
+		]
+	},
+	{
+		"id": 28,
+		"question": "Kolor flagi polskiej.",
+		"answers": [
+			{
+				"text": "Biały",
+				"points": 55,
+				"synonyms": ["biel"]
+			},
+			{
+				"text": "Czerwony",
+				"points": 45,
+				"synonyms": ["czerwień", "amarantowy"]
+			}
+		]
+	},
+	{
+		"id": 29,
+		"question": "Co rośnie w lesie?",
+		"answers": [
+			{
+				"text": "Drzewa",
+				"points": 40,
+				"synonyms": ["sosny", "dęby", "brzozy"]
+			},
+			{
+				"text": "Grzyby",
+				"points": 30,
+				"synonyms": ["podgrzybki", "borowiki"]
+			},
+			{
+				"text": "Jagody",
+				"points": 15,
+				"synonyms": ["borówki"]
+			},
+			{
+				"text": "Mech",
+				"points": 10,
+				"synonyms": ["mchy"]
+			},
+			{
+				"text": "Paproć",
+				"points": 5,
+				"synonyms": ["paprocie"]
+			}
+		]
+	},
+	{
+		"id": 30,
+		"question": "Co ma koła?",
+		"answers": [
+			{
+				"text": "Samochód",
+				"points": 35,
+				"synonyms": ["auto"]
+			},
+			{
+				"text": "Rower",
+				"points": 25,
+				"synonyms": ["bicykl"]
+			},
+			{
+				"text": "Autobus",
+				"points": 15,
+				"synonyms": ["bus", "komunikacja"]
+			},
+			{
+				"text": "Wózek",
+				"points": 10,
+				"synonyms": ["dziecięcy", "inwalidzki"]
+			},
+			{
+				"text": "Motocykl",
+				"points": 10,
+				"synonyms": ["motor"]
+			},
+			{
+				"text": "Hulajnoga",
+				"points": 5,
+				"synonyms": ["elektryczna"]
+			}
+		]
+	},
+	{
+		"id": 31,
+		"question": "Co można zgubić?",
+		"answers": [
+			{
+				"text": "Klucze",
+				"points": 30,
+				"synonyms": ["kluczyki"]
+			},
+			{
+				"text": "Telefon",
+				"points": 25,
+				"synonyms": ["komórkę", "smartfon"]
+			},
+			{
+				"text": "Portfel",
+				"points": 20,
+				"synonyms": ["pieniądze", "dokumenty"]
+			},
+			{
+				"text": "Głowę",
+				"points": 10,
+				"synonyms": ["rozum", "zmysły"]
+			},
+			{
+				"text": "Drogę",
+				"points": 10,
+				"synonyms": ["orientację", "kierunek"]
+			},
+			{
+				"text": "Nadzieję",
+				"points": 5,
+				"synonyms": ["wiarę"]
+			}
+		]
 	}
 ]

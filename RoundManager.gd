@@ -4,6 +4,11 @@ extends Node
 signal state_change_requested(new_state)
 signal round_message(msg)
 signal timer_start(duration, type)
+signal round_started(question_data)
+signal answer_revealed(answer_data)
+signal strike_occured(count)
+signal round_bank_updated(amount)
+signal decision_made(team_name, decision)
 
 enum RoundState { FACEOFF, DECISION, TEAM_PLAY, STEAL }
 var current_substate = RoundState.FACEOFF
@@ -24,6 +29,7 @@ var faceoff_active_player_id: int = -1
 var current_round_index: int = 0
 var faceoff_p1: int = -1
 var faceoff_p2: int = -1
+var buzzers_locked: bool = false
 
 # Referencje
 var q_manager = null 
@@ -35,9 +41,11 @@ func start_round(question, round_idx):
 	current_round_index = round_idx
 	current_question = question
 	round_bank = 0
+	emit_signal("round_bank_updated", 0)
 	strikes = 0
 	current_substate = RoundState.FACEOFF
 	waiting_for_decision = false
+	buzzers_locked = true
 
 	faceoff_pending_score = -1
 	faceoff_pending_team_idx = -1
@@ -46,17 +54,30 @@ func start_round(question, round_idx):
 	faceoff_p1 = t_manager.get_faceoff_player(0, round_idx)
 	faceoff_p2 = t_manager.get_faceoff_player(1, round_idx)
 
-	_log_info("POJEDYNEK! Do tablicy: %s (A) vs %s (B)" % [str(faceoff_p1), str(faceoff_p2)])
+	emit_signal("round_started", current_question)
 
-	# WYŚLIJ PYTANIE DO WSZYSTKICH GRACZY (do testów)
+	_log_info("POJEDYNEK! Do tablicy: %s (A) vs %s (B). Oczekiwanie na żart..." % [str(faceoff_p1), str(faceoff_p2)])
+	
+	# WYŚLIJ TREŚĆ PYTANIA DO WSZYSTKICH (w tle, by zaktualizować DOM klienta)
 	var question_msg = {
 		"type": "question",
 		"text": question["question"]
 	}
 	for client_id in NetworkManager.get_connected_clients():
 		NetworkManager.send_to_client(client_id, question_msg)
+	
+	# Initial Wait Screen
+	for client_id in NetworkManager.get_connected_clients():
+		NetworkManager.send_to_client(client_id, { "type": "set_screen", "screen": "wait", "msg": "Prowadzący czyta pytanie..." })
+	
+	# Delay for Joke (7s)
+	await get_tree().create_timer(7.0).timeout
+	
+	# Enable buzzers immediately
+	buzzers_locked = false
+	_log_info("Buzery aktywne (czytanie pytania)!")
 
-	# Ustawienie ekranów: BUZZER tylko dla walczących, WAIT dla reszty
+	# Ustawienie ekranów: BUZZER tylko dla walczących, WAIT dla reszty (Pytanie jeszcze nie widoczne na telefonie)
 	var p1_str = str(faceoff_p1)
 	var p2_str = str(faceoff_p2)
 
@@ -64,14 +85,27 @@ func start_round(question, round_idx):
 		var pid = NetworkManager.client_to_player_id.get(client_id, -1)
 		var pid_str = str(pid)
 		
-		if pid_str == p1_str or pid_str == p2_str:
+		# Robust int string compare just in case
+		var is_p1 = (pid == faceoff_p1) or (pid_str == p1_str)
+		var is_p2 = (pid == faceoff_p2) or (pid_str == p2_str)
+		
+		if is_p1 or is_p2:
 			NetworkManager.send_to_client(client_id, { "type": "set_screen", "screen": "buzzer" })
 		else:
 			NetworkManager.send_to_client(client_id, { "type": "set_screen", "screen": "wait", "msg": "Pojedynek: Gracz %s vs Gracz %s" % [p1_str, p2_str] })
 
+	# Delay for Question Reading (12s) - synchronizacja z GameUI
+	# W tym czasie buzzery są już aktywne
+	await get_tree().create_timer(12.0).timeout
+
+
 # Obsługa wciśnięcia buzera (wywoływana z GameManager)
 func handle_buzzer(player_id: int):
 	if current_substate != RoundState.FACEOFF or faceoff_active_player_id != -1:
+		return
+		
+	if buzzers_locked:
+		print("IGNOROWANE: Buzer wciśnięty przed czasem przez %d" % player_id)
 		return
 
 	# Walidacja - czy to właściwy gracz?
@@ -95,8 +129,16 @@ func handle_buzzer(player_id: int):
 			NetworkManager.send_to_client(cid, { "type": "set_screen", "screen": "wait", "msg": msg })
 
 
+var is_processing_answer: bool = false # Blokada przed spamowaniem
+
 # Główny router inputu, kieruje odpowiedź gracza do odpowiedniej podfunkcji w zależności od stanu rundy
 func handle_input(player_id: int, text: String, team_idx: int):
+	if is_processing_answer:
+		print("IGNOROWANE (BUSY): Input od %d: '%s' (Trwa sprawdzanie innej odpowiedzi)" % [player_id, text])
+		return
+
+	print("INPUT RECEIVED: PID=%d Team=%d Text='%s' State=%s Sub=%s" % [player_id, team_idx, text, "???", str(current_substate)])
+
 	match current_substate:
 		RoundState.FACEOFF:
 			# Sprawdzenie, czy odpowiada osoba, która wygrała buzer (lub faceoff_winner po nietrafionej odpowiedzi)
@@ -112,12 +154,14 @@ func handle_input(player_id: int, text: String, team_idx: int):
 		RoundState.DECISION:
 			if player_id == faceoff_winner_id:
 				_handle_decision(player_id, text)
+			else:
+				print("IGNOROWANE: Decyzja od %d, a oczekiwana od %d" % [player_id, faceoff_winner_id])
 				
 		RoundState.TEAM_PLAY:
 			if team_idx == playing_team:
 				_handle_team_play_answer(player_id, text, team_idx)
 			else:
-				print("IGNOROWANE: Odpowiada %s, a tura należy do %s" % [_get_team_name(team_idx), _get_team_name(playing_team)])
+				print("IGNOROWANE: Odpowiada %s (TeamIdx %d), a tura należy do %s (TeamIdx %d)" % [_get_team_name(team_idx), team_idx, _get_team_name(playing_team), playing_team])
 				
 		RoundState.STEAL:
 			if team_idx == playing_team:
@@ -125,13 +169,16 @@ func handle_input(player_id: int, text: String, team_idx: int):
 
 # Obsługuje odpowiedź w fazie pojedynku (FACEOFF), sprawdzając czy jest to TOP odpowiedź lub czy ma czekać na przebicie
 func _handle_faceoff_answer(player_id, text, team_idx):
+	is_processing_answer = true
 	if faceoff_pending_score != -1:
 		await _handle_faceoff_rebuttal(player_id, text, team_idx)
+		is_processing_answer = false
 		return
 
 	emit_signal("round_message", "Sędzia sprawdza odpowiedź: '%s'..." % text)
 	
 	var result = await q_manager.check_answer(text, current_question)
+	is_processing_answer = false
 	
 	# Znajdź ID przeciwnika (konkretny rywal w tym pojedynku, a nie losowy)
 	var opponent_id = -1
@@ -149,7 +196,9 @@ func _handle_faceoff_answer(player_id, text, team_idx):
 	if result:
 		var points = result["points"]
 		round_bank += points
+		emit_signal("round_bank_updated", round_bank)
 		q_manager.reveal_answer(result)
+		emit_signal("answer_revealed", result)
 		
 		var is_top = (current_question["answers"][0]["text"] == result["text"])
 		
@@ -159,7 +208,7 @@ func _handle_faceoff_answer(player_id, text, team_idx):
 		else:
 			faceoff_pending_score = points
 			faceoff_pending_team_idx = team_idx
-			faceoff_winner_id = player_id 
+			faceoff_winner_id = -1 # Reset winner ID, as we are waiting for rebuttal
 			
 			_log_info("[%s] TRAFIENIE! '%s' (+%d). Ale to nie TOP..." % [_get_team_name(team_idx), result["text"], points])
 			_log_info("Szansa dla przeciwnika na przebicie wyniku!")
@@ -170,6 +219,10 @@ func _handle_faceoff_answer(player_id, text, team_idx):
 				var oid_client = NetworkManager.get_client_id(opponent_id)
 				if pid_client != "": NetworkManager.send_to_client(pid_client, { "type": "set_screen", "screen": "wait", "msg": "Przeciwnik ma szansę na przebicie..." })
 				if oid_client != "": NetworkManager.send_to_client(oid_client, { "type": "set_screen", "screen": "input" })
+			else:
+				# No opponent? Then original player wins immediately
+				_win_faceoff(player_id, team_idx)
+
 				
 	else:
 		_log_info("[%s] PUDŁO w pojedynku! Szansa dla przeciwnika." % _get_team_name(team_idx))
@@ -197,33 +250,26 @@ func _handle_faceoff_rebuttal(player_id, text, team_idx):
 	if result:
 		var points = result["points"]
 		round_bank += points
+		emit_signal("round_bank_updated", round_bank)
 		q_manager.reveal_answer(result)
+		emit_signal("answer_revealed", result)
 		
 		if points > faceoff_pending_score:
 			_log_info("[%s] PRZEBICIE! '%s' (+%d) jest lepsze niż %d pkt!" % [_get_team_name(team_idx), result["text"], points, faceoff_pending_score])
 			_win_faceoff(player_id, team_idx)
 		else:
 			_log_info("[%s] '%s' (+%d) to za mało, by przebić %d pkt." % [_get_team_name(team_idx), result["text"], points, faceoff_pending_score])
-			_win_faceoff(faceoff_winner_id, faceoff_pending_team_idx)
+			# The original player (who set pending score) wins
+			
+			# Find original player from pending team idx
+			var winner_id = faceoff_p1 if faceoff_pending_team_idx == 0 else faceoff_p2
+			_win_faceoff(winner_id, faceoff_pending_team_idx)
 	else:
 		_log_info("[%s] PUDŁO! Wygrywa zespół, który trafił cokolwiek." % _get_team_name(team_idx))
-		if faceoff_winner_id != -1:
-			_win_faceoff(faceoff_winner_id, faceoff_pending_team_idx)
-		else:
-			_log_info("Obaj spudłowali! Reset buzzera.")
-			faceoff_pending_score = -1
-			faceoff_pending_team_idx = -1
-			faceoff_active_player_id = -1
-			
-			var p1_str = str(faceoff_p1)
-			var p2_str = str(faceoff_p2)
+		# The original player wins because rebutter missed
+		var winner_id = faceoff_p1 if faceoff_pending_team_idx == 0 else faceoff_p2
+		_win_faceoff(winner_id, faceoff_pending_team_idx)
 
-			for cid in NetworkManager.get_connected_clients():
-				var pid = NetworkManager.client_to_player_id.get(cid, -1)
-				if str(pid) == p1_str or str(pid) == p2_str:
-					NetworkManager.send_to_client(cid, { "type": "set_screen", "screen": "buzzer" })
-				else:
-					NetworkManager.send_to_client(cid, { "type": "set_screen", "screen": "wait", "msg": "Pojedynek (PONOWNIE)..." })
 
 # Kończy pojedynek, ustawia zwycięzcę i przechodzi do fazy DECISION (decyzji o grze)
 func _win_faceoff(winner_player_id, winner_team_idx):
@@ -252,12 +298,21 @@ func _handle_decision(player_id: int, text: String):
 	var command = text.to_upper()
 	if command == "GRAMY" or command == "PLAY" or command == "G":
 		current_substate = RoundState.TEAM_PLAY
-		_log_info("[%s] Decyzja: GRAMY! Tablica należy do nas." % _get_team_name(playing_team))
+		var team_name = _get_team_name(playing_team)
+		_log_info("[%s] Decyzja: GRAMY! Tablica należy do nas." % team_name)
+		emit_signal("decision_made", team_name, "GRAJĄ")
 		_start_team_play_phase()
 	elif command == "ODDAJEMY" or command == "PASS" or command == "O":
 		playing_team = 1 if playing_team == 0 else 0
 		current_substate = RoundState.TEAM_PLAY
-		_log_info("[%s] Decyzja: ODDAJEMY! Tablica dla przeciwników (%s)." % [_get_team_name(1 if playing_team==0 else 0), _get_team_name(playing_team)])
+		var team_name = _get_team_name(1 if playing_team==0 else 0) # Team that got passed to (wait, playing_team is already flipped here? Yes)
+		# Wait, playing_team is flipped in line above. So playing_team is now the team that IS playing.
+		# Original logic: playing_team = 1 if playing_team == 0 else 0
+		# So playing_team is the NEW playing team.
+		var passing_team_name = _get_team_name(1 if playing_team==0 else 0) # The one who passed
+		
+		_log_info("[%s] Decyzja: ODDAJEMY! Tablica dla przeciwników (%s)." % [passing_team_name, _get_team_name(playing_team)])
+		emit_signal("decision_made", passing_team_name, "ODDAJĄ")
 		_start_team_play_phase()
 
 
@@ -265,49 +320,92 @@ func _handle_decision(player_id: int, text: String):
 
 func _start_team_play_phase():
 	current_substate = RoundState.TEAM_PLAY
-	# Znajdź początkowego gracza (np. tego co wygrał faceoff, albo pierwszego w drużynie)
-	# Dla uproszczenia: jeśli wygraliśmy faceoff, to active player już wstawia się w metodzie handle_input, 
-	# ale tutaj resetujemy indeks na 0 lub na konkretnego gracza.
-	# Ustawiamy na pierwszego gracza w liście drużyny.
+	
+	# Reset faceoff players to send them back to desks (logic handled by UI polling these vars)
+	faceoff_p1 = -1
+	faceoff_p2 = -1
+	
+	# LOGIKA ROTACJI:
+	# Jeśli gra 1 osoba w drużynie, zawsze ona odpowiada.
+	# Jeśli > 1, kolejkujemy (indeks rośnie).
 	
 	# Startujemy od gracza następnego po tym, który brał udział w pojedynku (round_index)
-	# Jeśli drużyna ma np. 5 graczy, a jest runda 0 (faceoff grał P0), to zaczyna P1.
+	# Dzięki modulo w _update_input... obsłuży to zarówno 1 gracza (zawsze index 0) jak i wielu (rotacja).
 	current_member_index = current_round_index + 1
+	
+	_log_info("Start rundy drużynowej. Drużyna %s, index startowy: %d" % [_get_team_name(playing_team), current_member_index])
 	_update_input_for_active_team_member()
 
 
 func _update_input_for_active_team_member():
 	var team_members = t_manager.teams.get(playing_team, [])
-	if team_members.is_empty(): return
+	if team_members.is_empty(): 
+		print("BŁĄD: Pusta drużyna w _update_input_for_active_team_member!")
+		return
 	
+	# Zapewnienie pętli (modulo)
+	# Dla 1 gracza: x % 1 = 0 (zawsze ten sam)
+	# Dla N graczy: x % N = 0..N-1 (obieg)
 	current_member_index = current_member_index % team_members.size()
+	
 	var active_player_id = team_members[current_member_index]
 	var active_client_id = NetworkManager.get_client_id(active_player_id)
 	
+	_log_info("Tura gracza: %d (Client: %s)" % [active_player_id, active_client_id])
+	
 	# 1. Wyślij INPUT do aktywnego gracza
 	if active_client_id != "":
+		# ZAWSZE wysyłamy komendę wejścia (Input), nawet jeśli gracz już ją ma.
+		# W backendzie JS resetujemy pole tekstowe po wysłaniu, więc gracz czeka na ponowne 'input' tylko jeśli zmienił się stan,
+		# ALE tutaj logika jest taka: on jest na ekranie 'game-answer-input'.
+		# Jeśli nic nie zrobimy, pozostanie na tym ekranie. 
+		# Jeśli wyślemy mu "wait", a potem znów "input", to ekran mignie.
+		
+		# Żeby obsłużyć 'zapętlenie' (ta sama osoba odpowiada z rzędu), musimy dać znać frontendowi.
+		# Ale frontend i tak czyści input po wysłaniu. Więc jest gotowy do pisania.
+		
+		# PROBLEM: Jeśli frontend przełączył się na 'wait' (bo np. dostał wait od steal lub innego eventu?), to trzeba przywrócić.
+		# Tu wysyłamy input_active.
 		NetworkManager.send_to_client(active_client_id, { "type": "set_screen", "screen": "input" })
+		
+		# Dodatkowy debug
+		print("  -> Wysyłam INPUT do klienta: %s (Gracz %d)" % [active_client_id, active_player_id])
+	else:
+		print("BŁĄD: Nie znaleziono clientId dla aktywnego gracza %d!" % active_player_id)
 	
 	# 2. Wyślij WAIT do reszty
 	for client_id in NetworkManager.get_connected_clients():
 		if client_id != active_client_id:
-			var is_same_team = t_manager.get_player_team_index(NetworkManager.client_to_player_id.get(client_id, -1)) == playing_team
-			var msg = "Twój kolega z drużyny odpowiada..." if is_same_team else "Druga drużyna odpowiada..."
+			var pid = NetworkManager.client_to_player_id.get(client_id, -1)
+			var team_idx = t_manager.get_player_team_index(pid)
+			
+			var msg = ""
+			if team_idx == playing_team:
+				# Kolega z drużyny (widać tylko gdy graczy > 1)
+				msg = "Twój kolega odpowiada..."
+			else:
+				# Przeciwnik
+				msg = "Druga drużyna odpowiada..."
+				
 			NetworkManager.send_to_client(client_id, { "type": "set_screen", "screen": "wait", "msg": msg })
 
 
+
 func _handle_team_play_answer(player_id, text, team_idx):
+	is_processing_answer = true
 	# Sprawdzenie czy odpowiada właściwy gracz z kolejki
 	var team_members = t_manager.teams.get(playing_team, [])
 	var expected_id = team_members[current_member_index]
 	
 	if player_id != expected_id:
-		print("IGNOROWANE: Odpowiada %d, a kolejka gracza %d" % [player_id, expected_id])
+		print("IGNOROWANE: Odpowiada %d, a kolejka gracza %d (Index: %d)" % [player_id, expected_id, current_member_index])
+		is_processing_answer = false
 		return
 
 	emit_signal("round_message", "Sędzia sprawdza: '%s'..." % text)
 	
 	var result = await q_manager.check_answer(text, current_question)
+	is_processing_answer = false
 	
 	if result:
 		# Trafienie, ale sprawdź czy już nie było
@@ -320,7 +418,9 @@ func _handle_team_play_answer(player_id, text, team_idx):
 			_handle_strike(team_idx)
 		else:
 			round_bank += result["points"]
+			emit_signal("round_bank_updated", round_bank)
 			q_manager.reveal_answer(result)
+			emit_signal("answer_revealed", result)
 			_log_info("[%s] TRAFIENIE! '%s' (+%d)" % [_get_team_name(team_idx), result["text"], result["points"]])
 			
 			if q_manager.are_all_revealed_in_question(current_question):
@@ -334,6 +434,7 @@ func _handle_team_play_answer(player_id, text, team_idx):
 
 func _handle_strike(team_idx):
 	strikes += 1
+	emit_signal("strike_occured", strikes)
 	_log_info("[%s] BŁĄD nr %d/3" % [_get_team_name(team_idx), strikes])
 	
 	# Wibracja dla wszystkich w drużynie
@@ -374,9 +475,15 @@ func _process_steal_answer(text, team_idx):
 	
 	if result:
 		round_bank += result["points"]
+		emit_signal("round_bank_updated", round_bank)
+		# W kradzieży też odkrywamy? Zazwyczaj tak
+		q_manager.reveal_answer(result)
+		emit_signal("answer_revealed", result)
+		
 		_log_info("[%s] KRADZIEŻ UDANA! +%d pkt. Wygrywacie rundę!" % [_get_team_name(team_idx), result["points"]])
 		_finish_round(team_idx)
 	else:
+		_handle_strike(team_idx)
 		var original_team = 1 if team_idx == 0 else 0
 		_log_info("[%s] KRADZIEŻ NIEUDANA! Punkty wracają do %s." % [_get_team_name(team_idx), _get_team_name(original_team)])
 		_finish_round(original_team)
@@ -384,7 +491,18 @@ func _process_steal_answer(text, team_idx):
 # Kończy rundę, dodaje zebrane punkty do wyniku zwycięskiej drużyny i prosi o zmianę stanu gry
 func _finish_round(winner_idx):
 	t_manager.add_score(winner_idx, round_bank)
+	await _reveal_missed_answers()
 	emit_signal("state_change_requested", "ROUND_END")
+
+
+func _reveal_missed_answers():
+	if current_question.has("answers"):
+		for ans in current_question["answers"]:
+			# Sprawdzamy czy odpowiedź została już odkryta
+			if not ans["text"] in q_manager.get_revealed_answers(current_question):
+				emit_signal("answer_revealed", ans)
+				await get_tree().create_timer(1.0).timeout # Małe opóźnienie dla efektu wizualnego
+
 
 # Zwraca czytelną nazwę drużyny (DRUŻYNA A/B) na podstawie indeksu
 func _get_team_name(idx):
