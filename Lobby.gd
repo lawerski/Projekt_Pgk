@@ -38,6 +38,9 @@ func _ready():
 	if not NetworkManager.team_name_received.is_connected(_on_team_name_received):
 		NetworkManager.team_name_received.connect(_on_team_name_received)
 		
+	if not NetworkManager.player_left.is_connected(_on_player_left):
+		NetworkManager.player_left.connect(_on_player_left)
+
 	# Connect if needed
 	if not NetworkManager.connected:
 		NetworkManager.connect_to_relay()
@@ -47,6 +50,13 @@ func _ready():
 
 func _on_host_registered(code):
 	room_code_label.text = str(code)
+
+func _input(event):
+	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		# Reset lobby session logic in NetworkManager
+		NetworkManager.reset_session()
+		# Powrót do menu głównego
+		get_tree().change_scene_to_file("res://TitleScreen.tscn")
 
 func _on_player_joined(client_id, team):
 	_update_list()
@@ -169,3 +179,17 @@ func _base64_to_texture(base64_string: String) -> ImageTexture:
 	if err != OK: return null
 	return ImageTexture.create_from_image(image)
 
+func _on_player_left(client_id):
+	print("[Lobby] Player left: ", client_id)
+	# Remove from NetworkManager data structures already handled in NetworkManager
+	# Just update UI and TeamManager mapping
+	if NetworkManager.client_to_player_id.has(client_id):
+		var pid = NetworkManager.client_to_player_id[client_id]
+		# Remove from TeamManager if present
+		if team_manager: # <-- ADDED CHECK
+			var team_idx = team_manager.get_player_team_index(pid)
+			if team_idx != -1:
+				# Remove player from team list
+				team_manager.teams[team_idx].erase(pid)
+				team_manager.assign_captains()
+	_update_list()

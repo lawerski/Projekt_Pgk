@@ -86,7 +86,7 @@ wss.on('connection', ws => {
         }
     });
 
-    ws.on('close', () => {
+        ws.on('close', () => {
         if (ws._isHost && ws._room && ROOMS[ws._room]) {
             // Close all clients
             for (const clientId in ROOMS[ws._room].clients) {
@@ -94,8 +94,16 @@ wss.on('connection', ws => {
             }
             delete ROOMS[ws._room];
         } else if (ws._room && ws._clientId && ROOMS[ws._room]) {
+            const room = ROOMS[ws._room];
+            // Inform host about client disconnect so host can update UI
+            try {
+                if (room.host && room.host.readyState === WebSocket.OPEN) {
+                    room.host.send(JSON.stringify({ type: 'player_left', clientId: ws._clientId }));
+                }
+            } catch (e) {
+                // ignore
+            }
             delete ROOMS[ws._room].clients[ws._clientId];
-            // Optionally: inform host about disconnect
         }
     });
 });

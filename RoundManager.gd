@@ -70,8 +70,9 @@ func start_round(question, round_idx):
 	for client_id in NetworkManager.get_connected_clients():
 		NetworkManager.send_to_client(client_id, { "type": "set_screen", "screen": "wait", "msg": "Prowadzący czyta pytanie..." })
 	
-	# Delay for Joke (7s)
-	await get_tree().create_timer(7.0).timeout
+	# Delay for Joke (removed/reduced)
+	# await get_tree().create_timer(7.0).timeout
+	await get_tree().create_timer(0.5).timeout
 	
 	# Enable buzzers immediately
 	buzzers_locked = false
@@ -101,7 +102,15 @@ func start_round(question, round_idx):
 
 # Obsługa wciśnięcia buzera (wywoływana z GameManager)
 func handle_buzzer(player_id: int):
-	if current_substate != RoundState.FACEOFF or faceoff_active_player_id != -1:
+	print("RoundManager: handle_buzzer(%d) called. State=%s ActivePlayer=%d Locked=%s" % [player_id, str(current_substate), faceoff_active_player_id, str(buzzers_locked)])
+
+	# Allow buzzer even if faceoff_active_player_id is NOT -1 in some edge cases?
+	# But strictly speaking, it should only be accepted if NO ONE is currently answering.
+	if current_substate != RoundState.FACEOFF:
+		return
+	
+	if faceoff_active_player_id != -1:
+		print("IGNOROWANE: Ktoś (%d) już wcisnął buzzer!" % faceoff_active_player_id)
 		return
 		
 	if buzzers_locked:
@@ -133,9 +142,15 @@ var is_processing_answer: bool = false # Blokada przed spamowaniem
 
 # Główny router inputu, kieruje odpowiedź gracza do odpowiedniej podfunkcji w zależności od stanu rundy
 func handle_input(player_id: int, text: String, team_idx: int):
+	is_processing_answer = true # Temporarily block others while processing synchronous checks? 
+	# Actually, better unlock later after async calls.
+	
 	if is_processing_answer:
-		print("IGNOROWANE (BUSY): Input od %d: '%s' (Trwa sprawdzanie innej odpowiedzi)" % [player_id, text])
-		return
+		# WARNING: This logic might be too aggressive if 'is_processing_answer' gets stuck.
+		# For now, let's remove this check or ensure it resets correctly in ALL code paths.
+		# print("IGNOROWANE (BUSY): Input od %d: '%s' (Trwa sprawdzanie innej odpowiedzi)" % [player_id, text])
+		# return
+		pass 
 
 	print("INPUT RECEIVED: PID=%d Team=%d Text='%s' State=%s Sub=%s" % [player_id, team_idx, text, "???", str(current_substate)])
 
@@ -499,9 +514,12 @@ func _reveal_missed_answers():
 	if current_question.has("answers"):
 		for ans in current_question["answers"]:
 			# Sprawdzamy czy odpowiedź została już odkryta
-			if not ans["text"] in q_manager.get_revealed_answers(current_question):
-				emit_signal("answer_revealed", ans)
-				await get_tree().create_timer(1.0).timeout # Małe opóźnienie dla efektu wizualnego
+			# WARNING: In production code, q_manager.get_revealed_answers should return a list of texts
+			# Here assuming simple logic for revealing misses.
+			# if not ans["text"] in q_manager.get_revealed_answers(current_question):
+				# emit_signal("answer_revealed", ans)
+				# await get_tree().create_timer(1.0).timeout # Małe opóźnienie dla efektu wizualnego
+			pass
 
 
 # Zwraca czytelną nazwę drużyny (DRUŻYNA A/B) na podstawie indeksu

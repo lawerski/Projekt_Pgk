@@ -74,4 +74,3 @@ func reset_state():
 	team_names = { 0: "Drużyna A", 1: "Drużyna B" }
 	emit_signal("score_updated", 0, 0)
 	emit_signal("score_updated", 1, 0)
-

@@ -10,6 +10,7 @@ func get_connected_clients() -> Array:
 
 signal player_joined(client_id, team)
 signal team_chosen(client_id, team)
+signal player_left(client_id)
 signal player_buzzer(client_id)
 signal player_answer(client_id, answer)
 signal team_name_received(client_id, name)
@@ -117,10 +118,41 @@ func _process(_delta):
 						players_data[client_id]["team"] = team
 					
 					emit_signal("team_chosen", client_id, team)
-				"player_buzzer":
-					emit_signal("player_buzzer", data.clientId)
+				"buzzer": # <-- This was missing/wrong key potentially in client code or here
+					var client_id = data.clientId
+					var pid = client_to_player_id.get(client_id, -1)
+					print("[Network] BUZZER received from Client %s (PlayerID: %d)" % [client_id, pid])
+					emit_signal("player_buzzer", pid) ## PASS THE PLAYER ID!!!
+
+				"player_buzzer": # Support both old and new event types just in case
+					var client_id = data.clientId
+					var pid = client_to_player_id.get(client_id, -1)
+					print("[Network] BUZZER (old) received from Client %s (PlayerID: %d)" % [client_id, pid])
+					emit_signal("player_buzzer", pid) ## PASS THE PLAYER ID!!!
+
+				"answer": # Same for answers
+					var client_id = data.clientId
+					var pid = client_to_player_id.get(client_id, -1)
+					print("[Network] ANSWER received from Client %s (PlayerID: %d): %s" % [client_id, pid, str(data.get("answer"))])
+					emit_signal("player_answer", pid, data.get("answer"))
+
 				"player_answer":
-					emit_signal("player_answer", data.clientId, data.answer)
+					var client_id = data.clientId
+					var pid = client_to_player_id.get(client_id, -1)
+					print("[Network] ANSWER (player_answer) received from Client %s (PlayerID: %d): %s" % [client_id, pid, str(data.get("answer"))])
+					emit_signal("player_answer", pid, data.get("answer"))
+
+				"player_left":
+					var left_id = data.clientId
+					# Cleanup local maps
+					if players_data.has(left_id):
+						players_data.erase(left_id)
+					if client_to_team.has(left_id):
+						var t = int(client_to_team[left_id])
+						client_to_team.erase(left_id)
+						if team_to_clients.has(t):
+							team_to_clients[t].erase(left_id)
+					emit_signal("player_left", left_id)
 				"team_name":
 					emit_signal("team_name_received", data.clientId, data.name)
 				"cmd_start_round":
@@ -148,6 +180,17 @@ func get_client_id(player_id: int) -> String:
 			return cid
 	return ""
 
-func send_to_all(json_data: Dictionary):
-	for cid in get_connected_clients():
-		send_to_client(cid, json_data)
+func reset_session():
+	# Clear local states
+	players_data.clear()
+	client_to_team.clear()
+	team_to_clients = { 0: [], 1: [] }
+	client_to_player_id.clear()
+	room_code = "???"
+	
+	# Request new room code only if connected
+	if ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		ws.put_packet(JSON.stringify({ "type": "register_host" }).to_utf8_buffer())
+	else:
+		# If not connected, force reconnect which will naturally register host
+		connect_to_relay()

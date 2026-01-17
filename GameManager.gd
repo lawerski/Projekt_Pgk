@@ -30,8 +30,20 @@ var pot = 0
 var revealed_answers = []
 var is_steal_phase = false
 
+# TTS Manager Reference
+@onready var tts_manager = null # Will load dynamically
 
 func _ready():
+	# --- DODANE TTS ---
+	# Dynamicznie dodaj TTSManager jako dziecko
+	var tts_script = load("res://TTSManager.gd")
+	if tts_script:
+		tts_manager = tts_script.new()
+		add_child(tts_manager)
+		print("TTSManager zainicjalizowany.")
+	else:
+		printerr("Nie znaleziono skryptu TTSManager.gd!")
+
 	# 1. Konfiguracja referencji
 	if round_manager and question_manager and team_manager:
 		round_manager.q_manager = question_manager
@@ -47,10 +59,16 @@ func _ready():
 	# 3. Podłączenie sygnałów DEBUGOWYCH
 	round_manager.connect("round_message", _on_debug_message)
 	round_manager.connect("timer_start", _on_debug_timer)
+	
+	# Podłączenie TTS do round_message
+	round_manager.connect("round_message", _on_tts_round_message)
 
 	# Podłączenie sygnałów DEBUGOWYCH (Finał)
 	final_manager.connect("final_update", _on_debug_final_update)
 	final_manager.connect("play_sound", _on_debug_sound)
+	
+	# Podłączenie TTS do finału
+	final_manager.connect("final_update", _on_tts_final_update)
 
 	# --- DODANE: Połączenie z serwerem i obsługa kodu pokoju ---
 	if not NetworkManager.is_connected("host_registered", Callable(self, "_on_room_code")):
@@ -180,6 +198,12 @@ func start_next_round():
 	
 	print("PYTANIE: %s" % q["question"])
 	
+	# Delay reading question slightly to sync with UI
+	await get_tree().create_timer(1.0).timeout
+	
+	# Czytaj pytanie
+	tts_speak("Pytanie: " + q["question"], false)
+	
 	# (Wysyłanie ekranów buzzer jest teraz w RoundManager.start_round)
 
 
@@ -252,6 +276,10 @@ func _input(event):
 # --- FUNKCJE ODBIERAJĄCE SYGNAŁY (CALLBACKI) ---
 
 func _on_round_state_change(new_state_name):
+	# TTS dla zmiany stanu
+	if new_state_name == "ROUND_END":
+		tts_speak("Koniec rundy!", false)
+		
 	if new_state_name == "ROUND_END":
 		print(">>> [RUNDA]: Koniec rundy! Wyniki zaktualizowane.")
 		# Automatyczny start kolejnej sekwencji po 3 sekundach
@@ -279,118 +307,96 @@ func _perform_game_reset():
 
 func _on_final_end(score, won):
 	if won:
+		tts_speak("Gratulacje! Wygraliście 200 punktów!", false)
 		print(">>> [KONIEC GRY]: WYGRANA! Zdobyto 200 pkt w finale!")
 	else:
+		tts_speak("Niestety, to za mało. Wynik: " + str(score), false)
 		print(">>> [KONIEC GRY]: Przegrana. Wynik finału: " + str(score))
-	
-	# Automatyczny powrót do lobby
-	print("[GAME] Powrót do Lobby za 10 sekund...")
-	NetworkManager.send_to_all({"type": "set_screen", "screen": "end", "won": won, "score": score})
-	await get_tree().create_timer(10.0).timeout
-	
-	_perform_game_reset()
-	
-	# Zmiana sceny DOPIERO PO WYSŁANIU KOMUNIKATÓW
-	await get_tree().create_timer(0.5).timeout
-	get_tree().change_scene_to_file("res://Lobby.tscn")
-	
-func _show_exit_confirmation():
-	# Sprawdź czy dialog już istnieje
-	if get_node_or_null("ExitDialog"):
-		return
-		
-	var dialog = ConfirmationDialog.new()
-	dialog.name = "ExitDialog"
-	dialog.title = "Wyjście"
-	dialog.dialog_text = "Czy na pewno chcesz wrócić do menu głównego?\nGra zostanie przerwana."
-	dialog.get_ok_button().text = "Tak"
-	dialog.get_cancel_button().text = "Anuluj"
-	dialog.initial_position = Window.WINDOW_INITIAL_POSITION_CENTER_PRIMARY_SCREEN
-	
-	add_child(dialog)
-	dialog.confirmed.connect(_on_exit_confirmed)
-	dialog.canceled.connect(func(): dialog.queue_free())
-	dialog.popup()
 
-func _on_exit_confirmed():
-	# Usuń dialog
-	if get_node_or_null("ExitDialog"):
-		get_node("ExitDialog").queue_free()
-		
-	print(">>> [GAME] Wymuszone wyjście do lobby.")
-	_perform_game_reset()
-	await get_tree().create_timer(0.5).timeout
-	get_tree().change_scene_to_file("res://Lobby.tscn")
+func _on_player_buzzer(player_id): # REMOVED _timestamp
+	print("DEBUG: Otrzymano sygnał BUZZER od gracza: ", player_id)
+	match current_state:
+		GameState.ROUND_PLAY:
+			round_manager.handle_buzzer(player_id)
+		_:
+			print("IGNOROWANE: Buzer wciśnięty w złym stanie gry: ", current_state)
+
+func _on_player_answer(player_id, text): # REMOVED _timestamp
+	print("DEBUG: Otrzymano odpowiedź '%s' od gracza: %d" % [text, player_id])
+	process_player_input(player_id, text)
+
+func _on_team_chosen(client_id, team_idx):
+	# --- OBSŁUGA WYBORU DRUŻYNY ---
+	print("DEBUG: Otrzymano wybór drużyny od klienta: %d, Drużyna: %d" % [client_id, team_idx])
+	
+	# Znajdź powiązane PlayerID
+	var player_id = NetworkManager.client_to_player_id.get(client_id, -1)
+	if player_id == -1:
+		print("BŁĄD: Nie znaleziono powiązanego gracza dla ClientID: %d" % client_id)
+		return
+	
+	# Zaktualizuj drużynę gracza w TeamManager
+	team_manager.set_player_team(player_id, team_idx)
+	
+	# Powiadom innych graczy o zmianie drużyny (jeśli już są połączeni)
+	for cid in NetworkManager.client_to_player_id.keys():
+		if cid != client_id:
+			NetworkManager.send_to_client(cid, { "type": "player_team_changed", "player_id": player_id, "team_idx": team_idx })
+	
+	print("Gracz %d dołączył do drużyny %d" % [player_id, team_idx])
 
 # --- FUNKCJE DEBUGUJĄCE (WYPISYWANIE W KONSOLI) ---
 
 func _on_debug_message(msg):
+	# Nie czytamy wszystkiego, ale wybrane komunikaty tak
 	print("\n>>> [GRA]: " + msg)
 
-func _on_debug_timer(duration, type):
-	print(">>> [ZEGAR]: Start odliczania (%s s) - %s" % [str(duration), type])
+func _on_debug_timer(time_left):
+	# Opcjonalne: wypisywanie czasu w konsoli (można wyłączyć, żeby nie spamować)
+	# print("TIMER: " + str(time_left))
+	pass
 
-func _on_debug_final_update(question_text, time, current_score):
-	# Wyświetla stan finału w konsoli (zamiast na ekranie)
-	print(">>> [FINAŁ]: Pyt: '%s' | Czas: %.1f | Wynik: %d" % [question_text, time, current_score])
+func _on_debug_final_update(q_text, time_left, score):
+	# Debug finału
+	pass
 
-func _on_debug_sound(sound_name):
-	if sound_name == "repeat":
-		print("!!! [AUDIO]: DŹWIĘK BŁĘDU (BYŁO!) !!!")
-	else:
-		print(">>> [AUDIO]: " + sound_name)
+func _on_debug_sound(snd_name):
+	print("[SOUND] Grałbym dźwięk: " + snd_name)
 
+func _on_tts_round_message(msg):
+	# Proste mapowanie ważnych komunikatów na mowę
+	if msg.begins_with("Sędzia sprawdza odpowiedź:"):
+		var ans = msg.split("'")[1]
+		tts_speak("Odpowiedź: " + ans, true)
+	elif msg.begins_with("POJEDYNEK!"):
+		tts_speak("Pojedynek! Kto pierwszy ten lepszy.", false)
+	elif "TRAFIENIE" in msg:
+		tts_speak("Dobra odpowiedź!", false)
+	elif "PUDŁO" in msg:
+		tts_speak("To błędna odpowiedź.", false)
+	elif "BŁĄD" in msg:
+		tts_speak("Błąd!", false)
+	elif "START_TEAM_PLAY_AUTO" in msg:
+		tts_speak("Gramy!", false)
+	elif "PRZEJĘCIE" in msg:
+		tts_speak("Przejęcie! Drużyna przeciwna ma szansę.", false)
+	elif "DECYZJA" in msg:
+		tts_speak("Decyzja: Gramy czy oddajemy?", false)
 
-# --- LOGIKA SIECIOWA ---
+func _on_tts_final_update(question_text, time, current_score):
+	# Czytanie pytania finałowego? Może być spamowate przy odliczaniu.
+	# Lepiej czytać tylko raz, gdy pytanie się zmieni.
+	# Zostawmy to na razie proste.
+	pass
 
-func _on_player_connected(client_id, player_info):
-	var player_id = NetworkManager.client_to_player_id.get(client_id, -1)
-	if player_id == -1:
-		return
-	players[player_id] = player_info.get("name", "Gracz " + str(player_id))
+# Helper
+func tts_speak(text, is_player):
+	if tts_manager:
+		tts_manager.speak(text, is_player)
 
-	# Nowa logika: wybór drużyny przez gracza
-	var team_idx = -1
-	if player_info.has("team") and str(player_info.team).is_valid_int():
-		team_idx = int(player_info.team)
-	
-	# Jeśli team_idx to 0 lub 1, przypisz od razu. Jeśli -1, czekaj na wybór.
-	if team_idx == 0 or team_idx == 1:
-		team_manager.set_player_team(player_id, team_idx)
-		team_manager.assign_captains()
-		print("Dodano gracza %s (ID %d) do drużyny %s" % [players[player_id], player_id, "A" if team_idx==0 else "B"])
-	else:
-		print("Gracz %s (ID %d) dołączył do lobby (oczekiwanie na wybór drużyny)" % [players[player_id], player_id])
-
-func _on_team_chosen(client_id, team_idx):
-	var player_id = NetworkManager.client_to_player_id.get(client_id, -1)
-	if player_id == -1:
-		return
-
-	# Ustaw drużynę gracza w menedżerze drużyn
-	team_manager.set_player_team(player_id, team_idx)
-	team_manager.assign_captains()
-
-	var team_name = "Nieznana"
-	if team_idx == 0:
-		team_name = "A"
-	elif team_idx == 1:
-		team_name = "B"
- 
-
-
-# --- ODBIÓR BUZZERA ---
-func _on_player_buzzer(client_id):
-	var player_id = NetworkManager.client_to_player_id.get(client_id, -1)
-	if player_id != -1:
-		round_manager.handle_buzzer(player_id)
-
-
-# --- ODBIÓR ODPOWIEDZI BUZZER I GRY DRUŻYNOWEJ ---
-func _on_player_answer(client_id, answer):
-	var player_id = NetworkManager.client_to_player_id.get(client_id, -1)
-	if player_id == -1: return
-
-	# Przekaż odpowiedź do managera rundy
-	process_player_input(player_id, answer)
- 
+func _show_exit_confirmation():
+	print("ESC pressed - resetting game session...")
+	_perform_game_reset()
+	# Change scene back to Lobby if we are not already there
+	# Or reload the current scene to fully reset
+	get_tree().change_scene_to_file("res://Main.tscn")
