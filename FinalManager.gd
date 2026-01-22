@@ -15,11 +15,13 @@ var is_active: bool = false
 var todo_queue: Array = [] 
 var current_q_index_for_ui: int = 0
 var current_q_text: String = ""
+var waiting_for_2nd_start: bool = false
 
 # Inicjalizacja finału
 func setup_final(selected_questions: Array):
 	questions = selected_questions
 	current_q_text = ""
+	waiting_for_2nd_start = false
 	results.clear()
 	for q in questions:
 		results.append({
@@ -45,11 +47,11 @@ func start_player(player_num):
 	print("[FinalManager] Czas start: ", time_left)
 	
 	# Znajdź ID gracza finałowego z wygranej drużyny
-	var winner_team = get_parent().team_manager.check_for_finalist()
+	var winner_team = TeamManager.check_for_finalist()
 	if winner_team == -1: winner_team = 0 # Fallback do A
 	
 	# Wybieramy gracza nr 1 i nr 2 z tej drużyny
-	var members = get_parent().team_manager.teams.get(winner_team, [])
+	var members = TeamManager.teams.get(winner_team, [])
 	var active_player_id = -1
 	
 	if player_num == 1:
@@ -153,14 +155,27 @@ func finish_player_turn():
 	var total_score = _calculate_total_score()
 	
 	if current_player_idx == 1:
-		emit_signal("final_update", "Koniec P1", 0.0, total_score)
-		print("DEBUG: Oczekiwanie na start Gracza 2...")
-		await get_tree().create_timer(3.0).timeout
-		start_player(2)
+		waiting_for_2nd_start = true
+		emit_signal("final_update", "Koniec cz. 1. Oczekiwanie na drugiego gracza...", 0.0, total_score)
+		
+		# Ukryj odpowiedzi na tablicy (wyślij puste dane)
+		var masked = []
+		for i in range(5):
+			masked.append({"question":"", "p1_ans":"", "p1_pts":0, "p2_ans":"", "p2_pts":0})
+		emit_signal("final_state_update", masked)
+		
+		print("DEBUG: Oczekiwanie na start Gracza 2 (Wciśnij spację lub przycisk)...")
 	else:
 		var won = total_score >= 200
 		emit_signal("final_finished", total_score, won)
 		_show_end_screen(won, total_score)
+
+func start_second_part_manual():
+	if waiting_for_2nd_start:
+		waiting_for_2nd_start = false
+		# Przywróć widok wyników gracza 1 przed startem gracza 2
+		_emit_state()
+		start_player(2)
 
 func _show_end_screen(won, score):
 	# Send end game packet to clients

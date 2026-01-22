@@ -27,8 +27,5 @@ script = ExtResource("2_r0du0")
 [node name="RoundManager" type="Node" parent="GameManager"]
 script = ExtResource("4_fos0i")
 
-[node name="TeamManager" type="Node" parent="GameManager"]
-script = ExtResource("1_uu6xs")
-
 [node name="GameUI" parent="." instance=ExtResource("6_ui")]
 layout_mode = 1

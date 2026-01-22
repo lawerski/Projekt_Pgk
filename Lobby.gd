@@ -7,20 +7,9 @@ extends Control
 @onready var label_team_b = $VBoxContainer/TeamsSplit/TeamB/Header/Label
 @onready var start_button = $VBoxContainer/StartGameButton
 
-var team_manager
-
 func _ready():
 	print("[Lobby] Init")
-	
-	# Try to find TeamManager robustly
-	if get_tree().root.has_node("Main/GameManager/TeamManager"):
-		team_manager = get_tree().root.get_node("Main/GameManager/TeamManager")
-	elif get_tree().current_scene.name == "Main":
-		team_manager = get_tree().current_scene.get_node("GameManager/TeamManager")
-	elif get_tree().current_scene.find_child("TeamManager", true, false):
-		team_manager = get_tree().current_scene.find_child("TeamManager", true, false)
-	else:
-		printerr("[Lobby] Critical: TeamManager not found! Name changing will not work.")
+	_setup_visuals()
 	
 	# Connect Button
 	start_button.pressed.connect(_on_start_game_pressed)
@@ -65,7 +54,7 @@ func _on_team_chosen(client_id, team):
 	_update_list()
 	
 	# Check if this player is the first in the team
-	if team_manager and NetworkManager.client_to_player_id.has(client_id):
+	if NetworkManager.client_to_player_id.has(client_id):
 		var pid = NetworkManager.client_to_player_id[client_id]
 		# Logic is tricky here because _update_list reads from NetworkManager.players_data
 		# But TeamManager might not be synced yet if I don't call it.
@@ -75,23 +64,22 @@ func _on_team_chosen(client_id, team):
 		# Note: TeamManager.set_player_team returns is_first.
 		# But who calls set_player_team? GameManager usually.
 		# Let's just check the count in TeamManager
-		var is_first = team_manager.set_player_team(pid, team)
+		var is_first = TeamManager.set_player_team(pid, team)
 		if is_first:
 			NetworkManager.send_to_client(client_id, { "type": "request_team_name" })
 
 func _on_team_name_received(client_id, name):
 	print("[Lobby] Team name received: ", name)
-	if team_manager and NetworkManager.client_to_player_id.has(client_id):
+	if NetworkManager.client_to_player_id.has(client_id):
 		var pid = NetworkManager.client_to_player_id[client_id]
-		var team_idx = team_manager.get_player_team_index(pid)
+		var team_idx = TeamManager.get_player_team_index(pid)
 		if team_idx != -1:
-			team_manager.set_team_name(team_idx, name)
+			TeamManager.set_team_name(team_idx, name)
 			_update_team_labels()
 
 func _update_team_labels():
-	if team_manager:
-		if label_team_a: label_team_a.text = team_manager.get_team_name(0)
-		if label_team_b: label_team_b.text = team_manager.get_team_name(1)
+	if label_team_a: label_team_a.text = TeamManager.get_team_name(0)
+	if label_team_b: label_team_b.text = TeamManager.get_team_name(1)
 
 func _update_list():
 	print("[Lobby] Updating player list. Players: ", NetworkManager.players_data.keys().size())
@@ -186,10 +174,51 @@ func _on_player_left(client_id):
 	if NetworkManager.client_to_player_id.has(client_id):
 		var pid = NetworkManager.client_to_player_id[client_id]
 		# Remove from TeamManager if present
-		if team_manager: # <-- ADDED CHECK
-			var team_idx = team_manager.get_player_team_index(pid)
-			if team_idx != -1:
-				# Remove player from team list
-				team_manager.teams[team_idx].erase(pid)
-				team_manager.assign_captains()
+		# Remove player from team list
+		var team_idx = TeamManager.get_player_team_index(pid)
+		if team_idx != -1:
+			TeamManager.teams[team_idx].erase(pid)
+			TeamManager.assign_captains()
 	_update_list()
+
+func _setup_visuals():
+	# 1. Tło (Animowany Shader)
+	if has_node("Background"):
+		var bg_node = get_node("Background")
+		# UÅ¼yj stworzonego shadera zamiast gradientu
+		var shader = load("res://Background.gdshader")
+		if shader:
+			var mat = ShaderMaterial.new()
+			mat.shader = shader
+			bg_node.material = mat
+
+	# 2. Tytuł
+	var title = $VBoxContainer/Title
+	title.add_theme_color_override("font_color", Color(1.0, 0.9, 0.2)) # Gold
+	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 1))
+	title.add_theme_constant_override("shadow_offset_y", 4)
+
+	# 3. Panele Drużyn (Glassy)
+	_style_team_header($VBoxContainer/TeamsSplit/TeamA/Header, Color(0.1, 0.3, 0.8, 0.8)) # Blue Team
+	_style_team_header($VBoxContainer/TeamsSplit/TeamB/Header, Color(0.8, 0.1, 0.1, 0.8)) # Red Team
+
+	# 4. Przycisk Start
+	if start_button:
+		var style = StyleBoxFlat.new()
+		style.bg_color = Color(0.0, 0.5, 0.1, 1.0) # Green
+		style.border_width_bottom = 4
+		style.border_color = Color(0.0, 0.7, 0.2, 1.0)
+		style.corner_radius_bottom_left = 8
+		style.corner_radius_bottom_right = 8
+		style.corner_radius_top_left = 8
+		style.corner_radius_top_right = 8
+		start_button.add_theme_stylebox_override("normal", style)
+
+func _style_team_header(panel: PanelContainer, bg_color: Color):
+	var style = StyleBoxFlat.new()
+	style.bg_color = bg_color
+	style.border_width_bottom = 2
+	style.border_color = Color(1,1,1,0.3)
+	style.corner_radius_top_left = 10
+	style.corner_radius_top_right = 10
+	panel.add_theme_stylebox_override("panel", style)

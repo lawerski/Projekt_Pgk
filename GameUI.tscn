@@ -144,6 +144,11 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_script")
 
+[node name="GameCamera" type="Camera2D" parent="."]
+position = Vector2(960, 540)
+position_smoothing_enabled = true
+position_smoothing_speed = 3.0
+
 [node name="Background" type="TextureRect" parent="."]
 layout_mode = 1
 anchors_preset = 15
@@ -343,7 +348,7 @@ offset_right = -30.0
 offset_bottom = -80.0
 grow_horizontal = 2
 grow_vertical = 0
-theme_override_constants/separation = -25
+theme_override_constants/separation = 10
 alignment = 1
 
 [node name="Desk" type="Panel" parent="TeamStation_A"]
@@ -430,7 +435,7 @@ offset_right = -30.0
 offset_bottom = -80.0
 grow_horizontal = 2
 grow_vertical = 0
-theme_override_constants/separation = -25
+theme_override_constants/separation = 10
 alignment = 1
 
 [node name="Desk" type="Panel" parent="TeamStation_B"]

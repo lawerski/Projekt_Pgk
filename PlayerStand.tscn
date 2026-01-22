@@ -2,47 +2,77 @@
 
 [ext_resource type="Script" path="res://PlayerStand.gd" id="1_script"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_suit"]
-bg_color = Color(0.1, 0.1, 0.2, 1)
-corner_radius_top_left = 20
-corner_radius_top_right = 20
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_frame"]
+bg_color = Color(0, 0.2, 0.5, 1)
+border_width_left = 4
+border_width_top = 4
+border_width_right = 4
+border_width_bottom = 4
+border_color = Color(1, 0.7, 0.1, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_size = 5
+shadow_offset = Vector2(2, 2)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_name_bg"]
+bg_color = Color(0, 0.1, 0.3, 1)
+border_width_top = 2
+border_color = Color(1, 0.7, 0.1, 1)
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
 
 [node name="PlayerStand" type="Control"]
-custom_minimum_size = Vector2(150, 210)
+custom_minimum_size = Vector2(150, 220)
 layout_mode = 3
 anchors_preset = 0
 script = ExtResource("1_script")
 
-[node name="NickLabel" type="Label" parent="."]
+[node name="Frame" type="Panel" parent="."]
 layout_mode = 1
-anchors_preset = 5
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -70.0
-offset_top = 0.0
-offset_right = 70.0
-offset_bottom = 30.0
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 grow_horizontal = 2
-theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
-theme_override_font_sizes/font_size = 20
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_frame")
+
+[node name="VBox" type="VBoxContainer" parent="Frame"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 0
+
+[node name="AvatarMargin" type="MarginContainer" parent="Frame/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="Head" type="TextureRect" parent="Frame/VBox/AvatarMargin"]
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="NamePanel" type="PanelContainer" parent="Frame/VBox"]
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_name_bg")
+
+[node name="NickLabel" type="Label" parent="Frame/VBox/NamePanel"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 22
 text = "Nick"
 horizontal_alignment = 1
 vertical_alignment = 1
 text_overrun_behavior = 1
-
-[node name="Head" type="TextureRect" parent="."]
-custom_minimum_size = Vector2(140, 140)
-layout_mode = 1
-anchors_preset = 5
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -70.0
-offset_top = 35.0
-offset_right = 70.0
-offset_bottom = 175.0
-grow_horizontal = 2
-expand_mode = 1
-stretch_mode = 5
 
 [node name="BubbleRoot" type="Control" parent="."]
 visible = false
@@ -51,11 +81,28 @@ anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -150.0
-offset_top = -160.0
+offset_top = -140.0
 offset_right = 150.0
-offset_bottom = -10.0
+offset_bottom = 10.0
 grow_horizontal = 2
 pivot_offset = Vector2(150, 150)
+
+[node name="Tail" type="ColorRect" parent="BubbleRoot"]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -15.0
+offset_top = -20.0
+offset_right = 15.0
+offset_bottom = 10.0
+grow_horizontal = 2
+grow_vertical = 0
+rotation = 0.785398
+pivot_offset = Vector2(15, 15)
+color = Color(1, 1, 1, 1)
 
 [node name="Bg" type="ColorRect" parent="BubbleRoot"]
 layout_mode = 1
@@ -64,7 +111,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(1, 1, 1, 0.9)
+color = Color(1, 1, 1, 1)
 
 [node name="Label" type="Label" parent="BubbleRoot"]
 layout_mode = 1
@@ -78,7 +125,7 @@ offset_bottom = -5.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_colors/font_color = Color(0, 0, 0, 1)
-theme_override_font_sizes/font_size = 16
+theme_override_font_sizes/font_size = 18
 text = "..."
 horizontal_alignment = 1
 vertical_alignment = 1

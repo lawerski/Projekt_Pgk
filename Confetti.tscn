@@ -1,0 +1,26 @@
+[gd_scene format=3 uid="uid://confetti_vfx"]
+
+[node name="Confetti" type="CPUParticles2D"]
+position = Vector2(640, -50)
+emitting = false
+amount = 300
+lifetime = 5.0
+one_shot = true
+explosiveness = 0.7
+randomness = 0.5
+lifetime_randomness = 0.2
+emission_shape = 3
+emission_rect_extents = Vector2(600, 1)
+direction = Vector2(0, 1)
+spread = 20.0
+initial_velocity_min = 150.0
+initial_velocity_max = 400.0
+angular_velocity_min = -180.0
+angular_velocity_max = 180.0
+linear_accel_min = 20.0
+linear_accel_max = 50.0
+scale_amount_min = 8.0
+scale_amount_max = 16.0
+color = Color(1, 0.2, 0.2, 1)
+hue_variation_min = -1.0
+hue_variation_max = 1.0

@@ -1,10 +1,17 @@
 extends Node
 
+# --- SYGNAŁY ---
+signal exit_requested
+signal game_paused_players
+signal game_resumed_players
+signal host_message(text, duration) # Nowy sygnał dla GameUI
+
+var is_paused_for_players = false
+
 # --- ZMIENNE ---
 var players: Dictionary = {}
 
 # Podłączone moduły (dzieci w drzewie sceny)
-@onready var team_manager = $TeamManager
 @onready var question_manager = $QuestionManager
 @onready var round_manager = $RoundManager
 @onready var final_manager = $FinalManager
@@ -45,11 +52,11 @@ func _ready():
 		printerr("Nie znaleziono skryptu TTSManager.gd!")
 
 	# 1. Konfiguracja referencji
-	if round_manager and question_manager and team_manager:
+	if round_manager and question_manager:
 		round_manager.q_manager = question_manager
-		round_manager.t_manager = team_manager
+		round_manager.t_manager = TeamManager
 	else:
-		printerr("[GameManager] BŁĄD: Brakuje węzłów-dzieci (TeamManager, itp.)!")
+		printerr("[GameManager] BŁĄD: Brakuje węzłów-dzieci (QuestionManager, itp.)!")
 		return
 
 	# 2. Podłączenie sygnałów LOGICZNYCH
@@ -89,6 +96,12 @@ func _ready():
 	if not NetworkManager.is_connected("team_chosen", Callable(self, "_on_team_chosen")):
 		NetworkManager.connect("team_chosen", Callable(self, "_on_team_chosen"))
 
+	# Podłączenie sygnałów zarządzania graczami
+	if not NetworkManager.is_connected("player_left", Callable(self, "_on_player_left")):
+		NetworkManager.connect("player_left", Callable(self, "_on_player_left"))
+	if not NetworkManager.is_connected("player_joined", Callable(self, "_on_player_joined")):
+		NetworkManager.connect("player_joined", Callable(self, "_on_player_joined"))
+
 	# --- SYNCHRONIZACJA Z NETWORK MANAGER ---
 	# Ponieważ w Lobby gracze już dołączyli, musimy pobrać ich stan do TeamListenra
 	print("[GameManager] Synchronizacja graczy z NetworkManager...")
@@ -100,56 +113,24 @@ func _ready():
 		# Opcjonalnie tutaj można wywołać setup_debug_game() jeśli testujemy bez serwera
 	
 	for cid in NetworkManager.client_to_player_id.keys():
-		var pid = NetworkManager.client_to_player_id[cid]
-		var team_idx = NetworkManager.client_to_team.get(cid, -1)
-		var p_info = NetworkManager.players_data.get(cid, {})
-		var nick = p_info.get("nickname", "Gracz %d" % pid)
-		
-		print("  Synchronizacja: ClientID=%s -> PlayerID=%d, Nick=%s, Team=%d" % [cid, pid, nick, team_idx])
-		
-		# Rejestracja w lokalnym słowniku
-		players[pid] = nick
-		
-		# Sprawdzamy i naprawiamy przypisanie do drużyny
-		var needs_update = false
-		var old_team = team_idx
-		
-		if team_idx == -1:
-			team_idx = pid % 2 # Automatyczne przypisanie (0 lub 1)
-			needs_update = true
-			print("    -> Brak drużyny. Auto-przypisanie do: ", team_idx)
-		
-		# Upewnijmy się, że NetworkManager ma spójne dane
-		if needs_update:
-			NetworkManager.client_to_team[cid] = team_idx
-			
-			# Usuń ze starej listy (np. -1)
-			if NetworkManager.team_to_clients.has(old_team):
-				NetworkManager.team_to_clients[old_team].erase(cid)
-				
-			# Dodaj do nowej listy
-			if not NetworkManager.team_to_clients.has(team_idx):
-				NetworkManager.team_to_clients[team_idx] = []
-			if not NetworkManager.team_to_clients[team_idx].has(cid):
-				NetworkManager.team_to_clients[team_idx].append(cid)
-			
-			# Powiadom UI (jeśli już nasłuchuje)
-			NetworkManager.emit_signal("team_chosen", cid, team_idx)
-		
-		# Jeszcze raz sprawdźmy czy jest w team_to_clients (dla pewności, nawet jak miał team)
-		if NetworkManager.team_to_clients.has(team_idx) and not NetworkManager.team_to_clients[team_idx].has(cid):
-			NetworkManager.team_to_clients[team_idx].append(cid)
-			
-		team_manager.set_player_team(pid, team_idx)
+		register_player_internal(cid)
 	
-	team_manager.assign_captains()
+	TeamManager.assign_captains()
 	print("Stan TeamManager po synchronizacji:")
-	print("  Team 0: ", team_manager.teams[0])
-	print("  Team 1: ", team_manager.teams[1])
+	print("  Team 0: ", TeamManager.teams[0])
+	print("  Team 1: ", TeamManager.teams[1])
 
 	# Automatyczny start gry po załadowaniu sceny
 	print("[GameManager] Rozpoczynanie gry za 1 sekundę...")
 	await get_tree().create_timer(1.0).timeout
+	
+	# INTRO SEKWENCJA
+	SoundManager.play_sfx("intro")
+	emit_signal("host_message", "Witamy w Familiadzie! Przed nami emocjonująca rozgrywka!", 4.0)
+	tts_speak("Witamy w Familiadzie! Przed nami emocjonująca rozgrywka!", false)
+	
+	await get_tree().create_timer(5.0).timeout
+	
 	start_next_round()
 
 func _on_room_code(code):
@@ -162,9 +143,9 @@ func setup_debug_game():
 	players[3] = "Celina"
 	players[4] = "Darek"
 	
-	team_manager.teams[0] = [1, 3] # Drużyna A
-	team_manager.teams[1] = [2, 4] # Drużyna B
-	team_manager.assign_captains()
+	TeamManager.teams[0] = [1, 3] # Drużyna A
+	TeamManager.teams[1] = [2, 4] # Drużyna B
+	TeamManager.assign_captains()
 	
 	print("Gracze dodani. Wciśnij SPACJĘ (klikając w okno gry), aby rozpocząć.")
 
@@ -175,10 +156,17 @@ func start_next_round():
 	print("\n--- [GAME MANAGER] Rozpoczynanie nowej sekwencji ---")
 	
 	# 1. Sprawdź czy ktoś wchodzi do finału
-	var finalist = team_manager.check_for_finalist()
+	var finalist = TeamManager.check_for_finalist()
 	
 	if finalist != -1:
 		print("!!! MAMY FINALISTĘ (Drużyna %d). Uruchamiam procedurę finałową..." % finalist)
+		
+		# Opóźnienie i celebracja przed finałem
+		SoundManager.play_sfx("win")
+		tts_speak("Koniec rund punktowanych! Mamy zwycięską drużynę. Zapraszam do finału!", false)
+		
+		await get_tree().create_timer(7.0).timeout
+		
 		start_finale(finalist)
 		return
 
@@ -192,19 +180,92 @@ func start_next_round():
 	if q.is_empty():
 		print("BŁĄD KRYTYCZNY: Brak pytań do nowej rundy!")
 		return
-	
+
 	current_state = GameState.ROUND_PLAY
 	round_manager.start_round(q, round_counter - 1)
 	
 	print("PYTANIE: %s" % q["question"])
 	
-	# Delay reading question slightly to sync with UI
-	await get_tree().create_timer(1.0).timeout
+	# Delay reading question slightly to sync with UI (Slower pace)
+	# Adjusted to ~9s to wait for Host Joke to finish (UI shows joke for 9s)
+	await get_tree().create_timer(9.0).timeout
 	
 	# Czytaj pytanie
 	tts_speak("Pytanie: " + q["question"], false)
 	
 	# (Wysyłanie ekranów buzzer jest teraz w RoundManager.start_round)
+
+func register_player_internal(cid):
+	var pid = NetworkManager.client_to_player_id[cid]
+	var team_idx = NetworkManager.client_to_team.get(cid, -1)
+	var p_info = NetworkManager.players_data.get(cid, {})
+	var nick = p_info.get("nickname", "Gracz %d" % pid)
+	
+	print("  Rejestracja/Sync: ClientID=%s -> PlayerID=%d, Nick=%s, Team=%d" % [cid, pid, nick, team_idx])
+	
+	# Rejestracja w lokalnym słowniku
+	players[pid] = nick
+	
+	# Sprawdzamy i naprawiamy przypisanie do drużyny
+	var needs_update = false
+	var old_team = team_idx
+	
+	if team_idx == -1:
+		team_idx = pid % 2 # Automatyczne przypisanie (0 lub 1)
+		needs_update = true
+		print("    -> Brak drużyny. Auto-przypisanie do: ", team_idx)
+	
+	# Upewnijmy się, że NetworkManager ma spójne dane
+	if needs_update:
+		NetworkManager.client_to_team[cid] = team_idx
+		
+		# Usuń ze starej listy (np. -1)
+		if NetworkManager.team_to_clients.has(old_team):
+			NetworkManager.team_to_clients[old_team].erase(cid)
+			
+		# Dodaj do nowej listy
+		if not NetworkManager.team_to_clients.has(team_idx):
+			NetworkManager.team_to_clients[team_idx] = []
+		if not NetworkManager.team_to_clients[team_idx].has(cid):
+			NetworkManager.team_to_clients[team_idx].append(cid)
+		
+		# Powiadom UI (jeśli już nasłuchuje)
+		NetworkManager.emit_signal("team_chosen", cid, team_idx)
+	
+	# Jeszcze raz sprawdźmy czy jest w team_to_clients (dla pewności, nawet jak miał team)
+	if NetworkManager.team_to_clients.has(team_idx) and not NetworkManager.team_to_clients[team_idx].has(cid):
+		NetworkManager.team_to_clients[team_idx].append(cid)
+		
+	TeamManager.set_player_team(pid, team_idx)
+
+func _on_player_joined(client_id, team):
+	print(">>> [GRA] Gracz dołączył: ", client_id)
+	register_player_internal(client_id)
+	
+	# Sprawdź czy możemy wznowić grę
+	if is_paused_for_players:
+		var count = NetworkManager.client_to_player_id.size()
+		if count >= 2:
+			print(">>> [GRA] Wznowienie gry! Graczy: ", count)
+			is_paused_for_players = false
+			emit_signal("game_resumed_players")
+			tts_speak("Gra wznowiona!", false)
+
+func _on_player_left(client_id):
+	print(">>> [GRA] Gracz opuścił grę: ", client_id)
+	
+	# Sprawdź stan (NetworkManager już usunął wpis)
+	var count = NetworkManager.client_to_player_id.size()
+	print(">>> [GRA] Pozostało graczy: ", count)
+	
+	if current_state == GameState.ROUND_PLAY or current_state == GameState.FINAL:
+		if count < 2:
+			print("!!! ZA MAŁO GRACZY !!! Pauza.")
+			if not is_paused_for_players:
+				is_paused_for_players = true
+				if tts_manager: tts_manager.stop()
+				emit_signal("game_paused_players")
+				tts_speak("Zbyt mało graczy. Gra wstrzymana.", false)
 
 
 func start_finale(team_idx):
@@ -220,7 +281,7 @@ func start_finale(team_idx):
 
 func process_player_input(player_id: int, text: String):
 	# Sprawdzamy w jakiej drużynie jest gracz
-	var team_idx = team_manager.get_player_team_index(player_id)
+	var team_idx = TeamManager.get_player_team_index(player_id)
 	
 	match current_state:
 		GameState.ROUND_PLAY:
@@ -237,8 +298,12 @@ func _input(event):
 	if not event is InputEventKey or not event.pressed:
 		return
 
-	# USUNIĘTO OBSŁUGĘ SPACJI DO STARTU RUNDY
-	
+	# Start drugiej części finału spacją
+	if current_state == GameState.FINAL and event.keycode == KEY_SPACE:
+		if final_manager.waiting_for_2nd_start:
+			final_manager.start_second_part_manual()
+			return
+
 	# Menu wyjścia (ESC)
 	if event.keycode == KEY_ESCAPE:
 		_show_exit_confirmation()
@@ -282,8 +347,8 @@ func _on_round_state_change(new_state_name):
 		
 	if new_state_name == "ROUND_END":
 		print(">>> [RUNDA]: Koniec rundy! Wyniki zaktualizowane.")
-		# Automatyczny start kolejnej sekwencji po 3 sekundach
-		await get_tree().create_timer(3.0).timeout
+		# Automatyczny start kolejnej sekwencji po dÅ‚uÅ¼szym czasie (user request: za szybko)
+		await get_tree().create_timer(6.0).timeout
 		start_next_round()
 
 func _perform_game_reset():
@@ -295,7 +360,7 @@ func _perform_game_reset():
 	NetworkManager.team_to_clients = { 0: [], 1: [] }
 	
 	# Resetuj stan gry i drużyn
-	team_manager.reset_state()
+	TeamManager.reset_state()
 	current_state = GameState.LOBBY
 	round_counter = 0
 	strikes = 0
@@ -307,14 +372,23 @@ func _perform_game_reset():
 
 func _on_final_end(score, won):
 	if won:
+		SoundManager.play_sfx("win")
 		tts_speak("Gratulacje! Wygraliście 200 punktów!", false)
 		print(">>> [KONIEC GRY]: WYGRANA! Zdobyto 200 pkt w finale!")
 	else:
+		SoundManager.play_sfx("wrong") 
 		tts_speak("Niestety, to za mało. Wynik: " + str(score), false)
 		print(">>> [KONIEC GRY]: Przegrana. Wynik finału: " + str(score))
 
 func _on_player_buzzer(player_id): # REMOVED _timestamp
 	print("DEBUG: Otrzymano sygnał BUZZER od gracza: ", player_id)
+	
+	SoundManager.play_sfx("reveal")
+	
+	# Stop TTS immediately on buzzer
+	if tts_manager:
+		tts_manager.stop()
+		
 	match current_state:
 		GameState.ROUND_PLAY:
 			round_manager.handle_buzzer(player_id)
@@ -336,7 +410,7 @@ func _on_team_chosen(client_id, team_idx):
 		return
 	
 	# Zaktualizuj drużynę gracza w TeamManager
-	team_manager.set_player_team(player_id, team_idx)
+	TeamManager.set_player_team(player_id, team_idx)
 	
 	# Powiadom innych graczy o zmianie drużyny (jeśli już są połączeni)
 	for cid in NetworkManager.client_to_player_id.keys():
@@ -382,6 +456,11 @@ func _on_tts_round_message(msg):
 		tts_speak("Przejęcie! Drużyna przeciwna ma szansę.", false)
 	elif "DECYZJA" in msg:
 		tts_speak("Decyzja: Gramy czy oddajemy?", false)
+	elif msg.begins_with("CZYTANIE_PONOWNE|"):
+		var q_text = msg.split("|")[1]
+		# Delay slightly to not overlap with PUDŁO sound/tts
+		await get_tree().create_timer(1.5).timeout
+		tts_speak("Czytam ponownie: " + q_text, false)
 
 func _on_tts_final_update(question_text, time, current_score):
 	# Czytanie pytania finałowego? Może być spamowate przy odliczaniu.
@@ -395,7 +474,10 @@ func tts_speak(text, is_player):
 		tts_manager.speak(text, is_player)
 
 func _show_exit_confirmation():
-	print("ESC pressed - resetting game session...")
+	emit_signal("exit_requested")
+
+func quit_to_lobby():
+	print("ESC confirmed - resetting game session...")
 	_perform_game_reset()
 	# Change scene back to Lobby if we are not already there
 	# Or reload the current scene to fully reset

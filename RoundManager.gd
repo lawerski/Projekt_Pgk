@@ -9,6 +9,7 @@ signal answer_revealed(answer_data)
 signal strike_occured(count)
 signal round_bank_updated(amount)
 signal decision_made(team_name, decision)
+signal player_answer_display(text)
 
 enum RoundState { FACEOFF, DECISION, TEAM_PLAY, STEAL }
 var current_substate = RoundState.FACEOFF
@@ -70,9 +71,9 @@ func start_round(question, round_idx):
 	for client_id in NetworkManager.get_connected_clients():
 		NetworkManager.send_to_client(client_id, { "type": "set_screen", "screen": "wait", "msg": "Prowadzący czyta pytanie..." })
 	
-	# Delay for Joke (removed/reduced)
-	# await get_tree().create_timer(7.0).timeout
-	await get_tree().create_timer(0.5).timeout
+	# Delay for Joke (Matches GameUI duration)
+	# Increased to 9.0s to sync with "Slower gameplay"
+	await get_tree().create_timer(9.0).timeout
 	
 	# Enable buzzers immediately
 	buzzers_locked = false
@@ -87,8 +88,8 @@ func start_round(question, round_idx):
 		var pid_str = str(pid)
 		
 		# Robust int string compare just in case
-		var is_p1 = (pid == faceoff_p1) or (pid_str == p1_str)
-		var is_p2 = (pid == faceoff_p2) or (pid_str == p2_str)
+		var is_p1 = (str(pid) == str(faceoff_p1))
+		var is_p2 = (str(pid) == str(faceoff_p2))
 		
 		if is_p1 or is_p2:
 			NetworkManager.send_to_client(client_id, { "type": "set_screen", "screen": "buzzer" })
@@ -190,6 +191,7 @@ func _handle_faceoff_answer(player_id, text, team_idx):
 		is_processing_answer = false
 		return
 
+	await _announce_answer_and_wait(text)
 	emit_signal("round_message", "Sędzia sprawdza odpowiedź: '%s'..." % text)
 	
 	var result = await q_manager.check_answer(text, current_question)
@@ -242,6 +244,10 @@ func _handle_faceoff_answer(player_id, text, team_idx):
 	else:
 		_log_info("[%s] PUDŁO w pojedynku! Szansa dla przeciwnika." % _get_team_name(team_idx))
 		
+		# Czytaj pytanie ponownie dla przeciwnika (bo mogliśmy mu przerwać)
+		# NOTE: This assumes GameUI or GameManager listens to 'round_message' or we trigger it explicitly via signal
+		emit_signal("round_message", "CZYTANIE_PONOWNE|" + current_question["question"])
+		
 		faceoff_pending_score = 0
 		faceoff_pending_team_idx = team_idx
 		faceoff_winner_id = -1
@@ -258,6 +264,7 @@ func _handle_faceoff_rebuttal(player_id, text, team_idx):
 	if team_idx == faceoff_pending_team_idx:
 		return 
 		
+	await _announce_answer_and_wait(text)
 	emit_signal("round_message", "Sędzia sprawdza przebicie: '%s'..." % text)
 	
 	var result = await q_manager.check_answer(text, current_question)
@@ -417,6 +424,7 @@ func _handle_team_play_answer(player_id, text, team_idx):
 		is_processing_answer = false
 		return
 
+	await _announce_answer_and_wait(text)
 	emit_signal("round_message", "Sędzia sprawdza: '%s'..." % text)
 	
 	var result = await q_manager.check_answer(text, current_question)
@@ -484,6 +492,7 @@ func _trigger_steal():
 
 # Przetwarza odpowiedź drużyny próbującej kradzieży (STEAL), kończąc rundę sukcesem lub porażką
 func _process_steal_answer(text, team_idx):
+	await _announce_answer_and_wait(text)
 	emit_signal("round_message", "Weryfikacja kradzieży...")
 	
 	var result = await q_manager.check_answer(text, current_question)
@@ -529,3 +538,21 @@ func _get_team_name(idx):
 # Wysyła wiadomość do konsoli/UI za pomocą sygnału round_message
 func _log_info(msg):
 	emit_signal("round_message", msg)
+
+func _announce_answer_and_wait(text: String):
+	# Dostęp do TTS z GameManager (RoundManager jest dzieckiem GameManagera)
+	var gm = get_parent()
+	if gm and "tts_speak" in gm:
+		# Używamy tts_speak z GM lub bezpośrednio TTSManager
+		# gm.tts_speak("Odpowiedź: " + text, false) <- to by dodało "Pytanie:" itd.
+		# Lepiej bezpośrednio
+		if gm.tts_manager:
+			gm.tts_manager.speak(text, true) # true = głos gracza/lżejszy?
+	
+	# Oczekiwanie na zakończenie czytania (szacunkowe)
+	# ZwiÄ™kszamy opÃ³Åºnienie dla lepszego efektu (user request: za szybko)
+	var wait_time = 2.0 + text.length() * 0.15
+	await get_tree().create_timer(wait_time).timeout
+	
+	# Po przeczytaniu: pokaż odpowiedź nad tablicą
+	emit_signal("player_answer_display", text)

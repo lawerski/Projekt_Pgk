@@ -112,13 +112,10 @@ func check_answer(player_input: String, current_question: Dictionary) -> Diction
 	# Debug print
 	print("[QuestionManager] Checking answer: '%s'..." % player_input)
 
-	# --- FIX: Ensure current_scene is available or use global timer
-	# If this script is autoload or attached to a node that is NOT in the tree, create_timer might fail if get_tree() returns null.
-	# But QuestionManager is a child of GameManager, so it should be fine.
-	if not is_inside_tree():
-		print("ERROR: QuestionManager is not inside tree! Cannot wait.")
-	else:
-		await get_tree().create_timer(1.5).timeout
+	# --- FIX: UsuniÄ™to sztuczne opÃ³Åºnienie w logice biznesowej
+	# OpÃ³Åºnienie budujÄ…ce napiÄ™cie jest teraz kontrolowane przez RoundManager/GameManager
+	# dziÄ™ki czemu mamy peÅ‚nÄ… kontrolÄ™ w jednym miejscu.
+	# if not is_inside_tree(): ... await get_tree().create_timer(1.5).timeout
 
 	if current_question.is_empty() or not current_question.has("answers"):
 		return {}

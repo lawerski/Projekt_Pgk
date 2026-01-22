@@ -1,5 +1,4 @@
 extends Node
-class_name TeamManager
 
 signal score_updated(team_idx, new_score)
 signal team_name_updated(team_idx, new_name)

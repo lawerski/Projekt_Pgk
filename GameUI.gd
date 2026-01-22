@@ -2,7 +2,6 @@ extends Control
 
 @onready var game_manager = get_node("/root/Main/GameManager")
 @onready var round_manager = game_manager.get_node("RoundManager")
-@onready var team_manager = game_manager.get_node("TeamManager")
 
 # UI References via unique names or paths
 @onready var question_label = $BottomInfo
@@ -23,11 +22,14 @@ extends Control
 @onready var strike_overlay = $StrikeOverlay
 @onready var strike_label = $StrikeOverlay/Label
 @onready var final_board = $FinalBoard
+@onready var game_camera = $GameCamera
 
 # Preload scenes
 var answer_row_scene = preload("res://AnswerRow.tscn")
 
 var player_stand_scene = preload("res://PlayerStand.tscn")
+var exit_dialog: ConfirmationDialog
+var temp_answer_label: Label
 
 var host_jokes = [
 	"Jak szybko przemieszcza się burza? – Błyskawicznie!",
@@ -71,10 +73,49 @@ var host_jokes = [
 	"Jak najłatwiej zabić strusia? – Przestraszyć go na betonie."
 ]
 
+var current_question_text: String = ""
+
 func _ready():
 	print("GameUI Ready")
 	
 	_setup_host()
+	_setup_exit_dialog()
+	_setup_pause_screen()
+	_setup_visuals()
+
+	# Setup Temp Answer Label
+	temp_answer_label = Label.new()
+	temp_answer_label.name = "TempAnswerLabel"
+	temp_answer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	temp_answer_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	temp_answer_label.anchors_preset = Control.PRESET_CENTER
+	temp_answer_label.anchor_left = 0.5
+	temp_answer_label.anchor_right = 0.5
+	temp_answer_label.anchor_top = 0.5
+	temp_answer_label.anchor_bottom = 0.5
+	# Position above board
+	temp_answer_label.position = Vector2(0, -500) # Simple offset might not work with anchors if not set correctly
+	# Using offsets relative to anchors
+	temp_answer_label.offset_left = -400
+	temp_answer_label.offset_right = 400
+	temp_answer_label.offset_top = -550
+	temp_answer_label.offset_bottom = -470
+	temp_answer_label.add_theme_font_size_override("font_size", 56)
+	temp_answer_label.add_theme_color_override("font_color", Color(1, 1, 0)) # Yellow
+	temp_answer_label.add_theme_constant_override("outline_size", 12)
+	temp_answer_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+	temp_answer_label.text = ""
+	add_child(temp_answer_label)
+
+	if game_manager.has_signal("exit_requested"):
+		game_manager.connect("exit_requested", _on_exit_requested)
+	
+	if game_manager.has_signal("game_paused_players"):
+		game_manager.connect("game_paused_players", _on_game_paused)
+	if game_manager.has_signal("game_resumed_players"):
+		game_manager.connect("game_resumed_players", _on_game_resumed)
+	if game_manager.has_signal("host_message"):
+		game_manager.connect("host_message", _on_host_message)
 
 	# Connect Signals
 	round_manager.connect("round_started", _on_round_started)
@@ -82,10 +123,13 @@ func _ready():
 	round_manager.connect("strike_occured", _on_strike)
 	round_manager.connect("round_bank_updated", _on_bank_updated)
 	round_manager.connect("decision_made", _on_decision_made)
+	round_manager.connect("round_message", _on_round_message_ui)
+	if round_manager.has_signal("player_answer_display"):
+		round_manager.connect("player_answer_display", _on_player_answer_display)
 	
-	team_manager.connect("score_updated", _on_team_score_updated)
-	if team_manager.has_signal("team_name_updated"):
-		team_manager.connect("team_name_updated", _on_team_name_updated)
+	TeamManager.connect("score_updated", _on_team_score_updated)
+	if TeamManager.has_signal("team_name_updated"):
+		TeamManager.connect("team_name_updated", _on_team_name_updated)
 	
 	# Connect Network listener for avatars
 	NetworkManager.connect("player_joined", _on_player_joined)
@@ -109,11 +153,74 @@ func _ready():
 
 	# Initial team name update
 	_update_team_labels()
+	
+	# Initial camera pos (Full board center is roughly 960, 540)
+	set_camera_focus("BOARD")
 
 func _update_team_labels():
-	if team_manager:
-		if team_a_name_label: team_a_name_label.text = team_manager.get_team_name(0)
-		if team_b_name_label: team_b_name_label.text = team_manager.get_team_name(1)
+	if team_a_name_label: team_a_name_label.text = TeamManager.get_team_name(0)
+	if team_b_name_label: team_b_name_label.text = TeamManager.get_team_name(1)
+
+# --- CAMERA SYSTEM ---
+func set_camera_focus(target_name: String):
+	if !game_camera: return
+	
+	var target_pos = Vector2(960, 540) # Default Center
+	var zoom_level = Vector2(1, 1) # Default Zoom
+	
+	match target_name:
+		"BOARD":
+			target_pos = Vector2(960, 540)
+			zoom_level = Vector2(1, 1)
+		"FACEOFF":
+			# Zoom on central podium (bottom center)
+			target_pos = Vector2(960, 780) 
+			zoom_level = Vector2(1.8, 1.8)
+		"TEAM_A":
+			# Zoom on Team A (Bottom Left)
+			target_pos = Vector2(330, 720)
+			zoom_level = Vector2(1.5, 1.5)
+		"TEAM_B":
+			# Zoom on Team B (Bottom Right)
+			target_pos = Vector2(1590, 720)
+			zoom_level = Vector2(1.5, 1.5)
+		"HOST":
+			# Zoom on Host (Bottom Center-ish)
+			target_pos = Vector2(960, 810)
+			zoom_level = Vector2(2.0, 2.0)
+	
+	var tween = create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(game_camera, "position", target_pos, 1.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(game_camera, "zoom", zoom_level, 1.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+var pause_overlay: ColorRect
+
+func _setup_pause_screen():
+	pause_overlay = ColorRect.new()
+	pause_overlay.color = Color(0, 0, 0, 0.8)
+	pause_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pause_overlay.visible = false
+	
+	var label = Label.new()
+	label.text = "Oczekiwanie na graczy...\n(Minimum 2 osoby wymagane)"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	label.add_theme_font_size_override("font_size", 48)
+	
+	pause_overlay.add_child(label)
+	add_child(pause_overlay)
+
+func _on_game_paused():
+	# Show interrupt screen
+	if pause_overlay:
+		pause_overlay.visible = true
+		pause_overlay.move_to_front()
+
+func _on_game_resumed():
+	if pause_overlay:
+		pause_overlay.visible = false
 
 func _on_team_name_updated(team_idx, new_name):
 	print("GameUI: Team name updated: ", team_idx, " -> ", new_name)
@@ -125,11 +232,9 @@ func _setup_host():
 	# Use a default texture or load something specific
 	host_stand.set_player_data("Prowadzący", preload("res://icon.svg")) 
 	host_stand.client_id = -999 # Special ID for host
-	
-	# Say intro
-	get_tree().create_timer(1.0).timeout.connect(func():
-		_host_speak("Witam w Familiadzie! Zaczynamy grę!", 3.0)
-	)
+
+func _on_host_message(text, duration):
+	_host_speak(text, duration)
 
 func _host_speak(text, duration: float = 4.0):
 	if host_spot.get_child_count() > 0:
@@ -139,6 +244,7 @@ func _host_speak(text, duration: float = 4.0):
 
 func _on_round_started(question_data):
 	print("UI: Round Started: ", question_data["question"])
+	current_question_text = question_data["question"]
 	
 	# 1. Reset Board UI immediately
 	question_label.text = "..."
@@ -160,28 +266,49 @@ func _on_round_started(question_data):
 	
 	# Host joke
 	if host_jokes.size() > 0:
+		set_camera_focus("HOST") # Zoom on host for joke
 		var joke = host_jokes.pick_random()
-		# Joke lasts ~6-7s
-		_host_speak(joke, 7.0)
-	
+		# Joke lasts ~8-9s
+		_host_speak(joke, 9.0)
+		# Read joke via TTS
+		if game_manager and game_manager.has_method("tts_speak"):
+			# Slight delay to ensure mode switch logic inside TTSManager (if any) is ready
+			game_manager.tts_speak(joke, false) # false = Host voice
+
 	# Update positions for faceoff
 	_update_stand_positions()
 	
-	# Wait for joke to finish (7s)
-	await get_tree().create_timer(7.0).timeout
+	# Wait for joke to finish (9s)
+	await get_tree().create_timer(9.0).timeout
 	
-	# Host reads the question - INCREASED DURATION
-	_host_speak("Pytanie: " + question_data["question"], 12.0)
+	set_camera_focus("FACEOFF") # Zoom on faceoff/podium
 	
-	# Wait for reading (12s)
-	await get_tree().create_timer(12.0).timeout
+	# Play Intro/Tension sound
+	SoundManager.play_sfx("intro") 
 	
-	# Show on board
-	question_label.text = question_data["question"]
+	# Host reads the question - GENERIC MESSAGE to avoid spoilers
+	_host_speak("Posłuchajcie pytania...", 14.0)
+	
+	# Wait for reading (14s)
+	await get_tree().create_timer(14.0).timeout
+	
+	# Show on board ONLY if checking answers is done (handled by signals elsewhere now)
+	# question_label.text = question_data["question"]
 	_host_speak("Kto pierwszy ten lepszy!", 3.0) # To zniknie po 3s, ale Label zostanie
 
 func _on_answer_revealed(answer_data):
+	if temp_answer_label:
+		temp_answer_label.text = ""
+
+	# REVEAL QUESTION ON BOARD (Safe to show now)
+	if current_question_text != "":
+		question_label.text = current_question_text
+
 	print("[GameUI] _on_answer_revealed received: ", answer_data)
+	
+	# Play Sound
+	SoundManager.play_sfx("correct")
+	
 	var text = answer_data["text"]
 	var points = answer_data["points"]
 	
@@ -210,11 +337,22 @@ func _on_answer_revealed(answer_data):
 		if index < rows.size():
 			print("[GameUI] Revealing row ", index)
 			rows[index].reveal(text, points)
+			# Zoom out to see board clearly when answer revealed
+			set_camera_focus("BOARD")
+			
+			# Mini-conffeti for TOP answer (often index 0)
+			if index == 0:
+				trigger_confetti() # Reward for top answer!
 		else:
 			print("[GameUI] ERROR: Row index out of bounds! Rows: ", rows.size())
 	else:
 		print("[GameUI] ERROR: Could not find answer in current_question!")
 
+
+func _on_round_message_ui(msg):
+	if msg is String and msg.begins_with("CZYTANIE_PONOWNE|"):
+		if current_question_text != "":
+			question_label.text = current_question_text
 
 func _on_bank_updated(amount):
 	round_score_label.text = str(amount)
@@ -222,27 +360,130 @@ func _on_bank_updated(amount):
 func _on_team_score_updated(team_idx, new_score):
 	if team_idx == 0:
 		score_a_label.text = str(new_score)
+		if new_score > 0: set_camera_focus("TEAM_A")
 	else:
 		score_b_label.text = str(new_score)
+		if new_score > 0: set_camera_focus("TEAM_B")
+	
+	# Return to board after short delay
+	get_tree().create_timer(2.0).timeout.connect(func(): set_camera_focus("BOARD"))
 
 func _on_decision_made(team_name, decision):
 	var msg = "Drużyna %s decyduje: %s!" % [team_name, decision]
 	_host_speak(msg)
 	
+	if decision == "GRAMY":
+		if team_name == TeamManager.get_team_name(0):
+			set_camera_focus("TEAM_A")
+		else:
+			set_camera_focus("TEAM_B")
+	
 	# Wait a short moment then return players to desks
 	await get_tree().create_timer(2.0).timeout
 	_update_stand_positions()
+
+func _on_player_answer_display(text):
+	if temp_answer_label:
+		temp_answer_label.text = text
+		temp_answer_label.add_theme_color_override("font_color", Color(1, 1, 0)) # Reset to Yellow
+	
+	# Zoom on the answering team? Or Faceoff?
+	# RoundManager knows who is answering, but here we just get text.
+	# But generally if player speaks, it's nice to see them.
+	# We'll leave it for now or implement "active speaker zoom" via TeamManager lookups if needed.
 
 func _on_strike(count):
 	strike_label.text = "X".repeat(count)
 	strike_overlay.visible = true
 	
+	# Play Sound
+	SoundManager.play_sfx("wrong")
+	
+	trigger_camera_shake(15.0) # <--- JUICE: CAMERA SHAKE ON ERROR
+	
+	# Visualize error on the answer label too
+	if temp_answer_label:
+		temp_answer_label.add_theme_color_override("font_color", Color(1, 0, 0)) # Red
+	
 	_host_speak(["Niestety nie...", "Pudło!", "Nie ma takiej odpowiedzi."].pick_random())
 
 	# Play sound here if AudioStreamPlayer available
-	await get_tree().create_timer(1.5).timeout
+	# WydÅ‚uÅ¼amy wyÅ›wietlanie 'X' (user request: za szybko)
+	await get_tree().create_timer(3.0).timeout
 	strike_overlay.visible = false
+	if temp_answer_label:
+		temp_answer_label.text = "" # Clear after strike animation
+		temp_answer_label.add_theme_color_override("font_color", Color(1, 1, 0)) # Reset to Yellow
+func _setup_visuals():
+	# 1. WorldEnvironment (Glow/Bloom)
+	var world_env = WorldEnvironment.new()
+	var env = Environment.new()
+	env.background_mode = Environment.BG_CANVAS
+	env.glow_enabled = true
+	# --- FIX: Zmniejszamy intensywnoÅ›Ä‡ glow, bo byÅ‚o "za jasno" ---
+	env.set("glow_levels/1", 0.0)
+	env.set("glow_levels/2", 0.0)
+	env.set("glow_levels/3", 0.6) # Tylko Å›rednie detale
+	env.set("glow_levels/5", 0.2)
+	env.glow_intensity = 0.5   # Zmniejszono z 1.0
+	env.glow_strength = 0.85   # Zmniejszono z 0.95
+	env.glow_bloom = 0.0       # Bloom czÄ™sto przepala biel
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT # Åagodniejsze mieszanie niÅ¼ SCREEN
+	env.glow_hdr_threshold = 0.9 # WyÅ¼szy prÃ³g, Å¼eby Å›wieciÅ‚y tylko bardzo jasne rzeczy
+	world_env.environment = env
+	add_child(world_env)
+	
+	# 2. Styl Tablicy (Board)
+	# Szukamy BoardInner lub Panelu tła
+	if has_node("BoardArea/BoardInner"):
+		var board = get_node("BoardArea/BoardInner")
+		var style = StyleBoxFlat.new()
+		style.bg_color = Color(0.01, 0.02, 0.15, 0.95) # Jeszcze ciemniejszy granat dla kontrastu
+		style.border_width_bottom = 8
+		style.border_width_left = 8
+		style.border_width_right = 8
+		style.border_width_top = 8
+		style.border_color = Color(0.8, 0.6, 0.1, 1.0) # Złota ramka
+		style.corner_radius_bottom_left = 15
+		style.corner_radius_bottom_right = 15
+		style.corner_radius_top_left = 15
+		style.corner_radius_top_right = 15
+		style.shadow_color = Color(0,0,0, 0.8)
+		style.shadow_size = 50
+		board.add_theme_stylebox_override("panel", style)
 
+	# 3. Label Settings (Cienie pod tekstem)
+	_apply_text_shadows(self)
+
+func _apply_text_shadows(node):
+	for child in node.get_children():
+		if child is Label:
+			_style_label(child)
+		_apply_text_shadows(child)
+
+func _style_label(lbl: Label):
+	# Doda cień i outline
+	if not lbl.label_settings:
+		var settings = LabelSettings.new()
+		settings.font_size = lbl.get_theme_font_size("font_size")
+		if settings.font_size <= 0: settings.font_size = 24 # Fallback
+		
+		# Kolor bazowy (zachowaj istniejący jeśli nadpisany, inaczej biały)
+		if lbl.has_theme_color_override("font_color"):
+			settings.font_color = lbl.get_theme_color("font_color")
+		else:
+			settings.font_color = Color.WHITE
+			
+		settings.outline_size = 4
+		settings.outline_color = Color.BLACK
+		settings.shadow_size = 8
+		settings.shadow_color = Color(0,0,0,0.6)
+		settings.shadow_offset = Vector2(2, 2)
+		lbl.label_settings = settings
+	else:
+		# Tylko update
+		lbl.label_settings.shadow_size = 8
+		lbl.label_settings.shadow_color = Color(0,0,0,0.6)
 # --- Final Round Handlers ---
 
 # --- Final Round Handlers ---
@@ -262,8 +503,36 @@ func _on_final_finished(total, won):
 	if won:
 		final_board.show_message("WYGRANA! %d pkt" % total)
 		final_board.score_label.add_theme_color_override("font_color", Color.GREEN)
+		trigger_confetti() # <--- JUICE
 	else:
 		final_board.show_message("KONIEC! %d pkt" % total)
+
+# --- JUICE MECHANICS (Camera Shake & Confetti) ---
+var shake_strength: float = 0.0
+var confetti_scene = preload("res://Confetti.tscn")
+
+func _process(delta):
+	# Camera Shake decay
+	if shake_strength > 0:
+		if game_camera:
+			game_camera.offset = Vector2(randf_range(-shake_strength, shake_strength), randf_range(-shake_strength, shake_strength))
+		
+		shake_strength = move_toward(shake_strength, 0, delta * 30.0) # Decay
+	else:
+		if game_camera and game_camera.offset != Vector2.ZERO:
+			game_camera.offset = Vector2.ZERO
+
+func trigger_camera_shake(strength: float = 15.0):
+	shake_strength = strength
+
+func trigger_confetti():
+	var confetti = confetti_scene.instantiate()
+	add_child(confetti)
+	confetti.position = Vector2(960, 0) # Top center
+	confetti.emitting = true
+	# Auto remove after lifetime
+	await get_tree().create_timer(5.0).timeout
+	confetti.queue_free()
 
 # --- Avatars Logic ---
 
@@ -285,12 +554,16 @@ func _update_avatars():
 	print("[GameUI] Updating avatars. Team A: ", team0_ids.size(), " players. Team B: ", team1_ids.size(), " players.")
 	
 	# Team A (0)
-	for cid in team0_ids:
-		_create_player_stand(cid, avatars_a_container)
+	for i in range(team0_ids.size()):
+		var cid = team0_ids[i]
+		var stand = _create_player_stand(cid, avatars_a_container)
+		if stand: stand.set_visual_index(i)
 		
 	# Team B (1)
-	for cid in team1_ids:
-		_create_player_stand(cid, avatars_b_container)
+	for i in range(team1_ids.size()):
+		var cid = team1_ids[i]
+		var stand = _create_player_stand(cid, avatars_b_container)
+		if stand: stand.set_visual_index(i)
 	
 	# Reposition if round is active
 	call_deferred("_update_stand_positions")
@@ -362,22 +635,27 @@ func _create_player_stand(client_id, container):
 		texture = base64_to_texture(avatar_b64)
 	
 	stand.set_player_data(nick, texture)
+	return stand
 
-func _on_player_answer_spoke(client_id, answer_text):
+func _on_player_answer_spoke(player_id, answer_text):
+	# The signal transmits player_id (int), but stands are indexed by client_id (String)
+	var client_id = NetworkManager.get_client_id(player_id)
+	
 	# Find the stand and show bubble
 	var stand = _find_stand_by_id(client_id)
 	if stand:
 		stand.show_bubble(answer_text)
 
 func _find_stand_by_id(client_id) -> Node:
+	var cid_str = str(client_id)
 	for child in avatars_a_container.get_children():
-		if "client_id" in child and child.client_id == client_id:
+		if "client_id" in child and str(child.client_id) == cid_str:
 			return child
 	for child in avatars_b_container.get_children():
-		if "client_id" in child and child.client_id == client_id:
+		if "client_id" in child and str(child.client_id) == cid_str:
 			return child
 	for child in faceoff_container.get_children():
-		if "client_id" in child and child.client_id == client_id:
+		if "client_id" in child and str(child.client_id) == cid_str:
 			return child
 	return null
 
@@ -394,3 +672,19 @@ func base64_to_texture(base64_string: String) -> ImageTexture:
 		# If loading failed, return null (GameUI or PlayerStand can handle defaults)
 		return null
 	return ImageTexture.create_from_image(image)
+
+func _setup_exit_dialog():
+	exit_dialog = ConfirmationDialog.new()
+	exit_dialog.title = "Wyjście"
+	exit_dialog.dialog_text = "Czy na pewno chcesz wyjść do Lobby?\nGra zostanie przerwana."
+	exit_dialog.ok_button_text = "Tak"
+	exit_dialog.cancel_button_text = "Nie"
+	exit_dialog.initial_position = Window.WINDOW_INITIAL_POSITION_CENTER_MAIN_WINDOW_SCREEN
+	exit_dialog.confirmed.connect(_on_exit_confirmed)
+	add_child(exit_dialog)
+
+func _on_exit_requested():
+	exit_dialog.popup_centered()
+
+func _on_exit_confirmed():
+	game_manager.quit_to_lobby()
