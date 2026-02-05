@@ -161,6 +161,11 @@ func _update_team_labels():
 	if team_a_name_label: team_a_name_label.text = TeamManager.get_team_name(0)
 	if team_b_name_label: team_b_name_label.text = TeamManager.get_team_name(1)
 
+# --- ESCAPE KEY HANDLER ---
+func _input(event):
+	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		exit_dialog.popup_centered()
+
 # --- CAMERA SYSTEM ---
 func set_camera_focus(target_name: String):
 	if !game_camera: return
@@ -178,11 +183,13 @@ func set_camera_focus(target_name: String):
 			zoom_level = Vector2(1.8, 1.8)
 		"TEAM_A":
 			# Zoom on Team A (Bottom Left)
-			target_pos = Vector2(330, 720)
+			# Clamp X to 640 to keep view within 0 (1920 width / 1.5 zoom = 1280 visible width. Center needs to be at least 640)
+			target_pos = Vector2(640, 720)
 			zoom_level = Vector2(1.5, 1.5)
 		"TEAM_B":
 			# Zoom on Team B (Bottom Right)
-			target_pos = Vector2(1590, 720)
+			# Clamp X to 1280 (1920 - 640)
+			target_pos = Vector2(1280, 720)
 			zoom_level = Vector2(1.5, 1.5)
 		"HOST":
 			# Zoom on Host (Bottom Center-ish)
@@ -232,6 +239,8 @@ func _setup_host():
 	# Use a default texture or load something specific
 	host_stand.set_player_data("Prowadzący", preload("res://icon.svg")) 
 	host_stand.client_id = -999 # Special ID for host
+	# Ensure bubble is wide enough for short texts
+	# host_stand.bubble_root.custom_minimum_size = Vector2(300, 100) # Optional
 
 func _on_host_message(text, duration):
 	_host_speak(text, duration)
@@ -267,34 +276,29 @@ func _on_round_started(question_data):
 	# Host joke
 	if host_jokes.size() > 0:
 		set_camera_focus("HOST") # Zoom on host for joke
-		var joke = host_jokes.pick_random()
-		# Joke lasts ~8-9s
-		_host_speak(joke, 9.0)
-		# Read joke via TTS
+		# Joke handling - rely on GameManager TTS
 		if game_manager and game_manager.has_method("tts_speak"):
-			# Slight delay to ensure mode switch logic inside TTSManager (if any) is ready
-			game_manager.tts_speak(joke, false) # false = Host voice
+			pass
+			# var joke = host_jokes.pick_random()
+			# game_manager.tts_speak(joke, false) 
+
 
 	# Update positions for faceoff
 	_update_stand_positions()
 	
-	# Wait for joke to finish (9s)
-	await get_tree().create_timer(9.0).timeout
+	# Wait for joke/intro (Matched with GameManager 4s delay + short buffer)
+	await get_tree().create_timer(4.0).timeout
 	
 	set_camera_focus("FACEOFF") # Zoom on faceoff/podium
 	
 	# Play Intro/Tension sound
 	SoundManager.play_sfx("intro") 
 	
-	# Host reads the question - GENERIC MESSAGE to avoid spoilers
-	_host_speak("Posłuchajcie pytania...", 14.0)
+	# Wait for reading (Synchronized with GameManager reading ~5s)
+	await get_tree().create_timer(5.0).timeout
 	
-	# Wait for reading (14s)
-	await get_tree().create_timer(14.0).timeout
-	
-	# Show on board ONLY if checking answers is done (handled by signals elsewhere now)
+	# Show on board ONLY if checking answers is done
 	# question_label.text = question_data["question"]
-	_host_speak("Kto pierwszy ten lepszy!", 3.0) # To zniknie po 3s, ale Label zostanie
 
 func _on_answer_revealed(answer_data):
 	if temp_answer_label:
@@ -317,7 +321,7 @@ func _on_answer_revealed(answer_data):
 	var q = round_manager.current_question
 	var index = -1
 	
-	_host_speak(["Dobrze!", "Brawo!", "Jest na tablicy!", "Tak jest!"].pick_random())
+	# Removed explicit _host_speak (GameManager handles praise)
 
 	if q.has("answers"):
 		for i in range(q["answers"].size()):
@@ -370,7 +374,7 @@ func _on_team_score_updated(team_idx, new_score):
 
 func _on_decision_made(team_name, decision):
 	var msg = "Drużyna %s decyduje: %s!" % [team_name, decision]
-	_host_speak(msg)
+	# _host_speak(msg) - Removed to avoid desync
 	
 	if decision == "GRAMY":
 		if team_name == TeamManager.get_team_name(0):
@@ -405,7 +409,7 @@ func _on_strike(count):
 	if temp_answer_label:
 		temp_answer_label.add_theme_color_override("font_color", Color(1, 0, 0)) # Red
 	
-	_host_speak(["Niestety nie...", "Pudło!", "Nie ma takiej odpowiedzi."].pick_random())
+	# _host_speak(["Niestety nie...", "Pudło!", "Nie ma takiej odpowiedzi."].pick_random()) - Removed to avoid desync
 
 	# Play sound here if AudioStreamPlayer available
 	# WydÅ‚uÅ¼amy wyÅ›wietlanie 'X' (user request: za szybko)
@@ -452,38 +456,40 @@ func _setup_visuals():
 		style.shadow_size = 50
 		board.add_theme_stylebox_override("panel", style)
 
-	# 3. Label Settings (Cienie pod tekstem)
-	_apply_text_shadows(self)
+	# 3. Label Settings (Cienie pod tekstem) - REMOVED per user request
+	# _apply_text_shadows(self)
 
 func _apply_text_shadows(node):
-	for child in node.get_children():
-		if child is Label:
-			_style_label(child)
-		_apply_text_shadows(child)
+	pass
+	# for child in node.get_children():
+	# 	if child is Label:
+	# 		_style_label(child)
+	# 	_apply_text_shadows(child)
 
 func _style_label(lbl: Label):
+	pass
 	# Doda cień i outline
-	if not lbl.label_settings:
-		var settings = LabelSettings.new()
-		settings.font_size = lbl.get_theme_font_size("font_size")
-		if settings.font_size <= 0: settings.font_size = 24 # Fallback
-		
-		# Kolor bazowy (zachowaj istniejący jeśli nadpisany, inaczej biały)
-		if lbl.has_theme_color_override("font_color"):
-			settings.font_color = lbl.get_theme_color("font_color")
-		else:
-			settings.font_color = Color.WHITE
-			
-		settings.outline_size = 4
-		settings.outline_color = Color.BLACK
-		settings.shadow_size = 8
-		settings.shadow_color = Color(0,0,0,0.6)
-		settings.shadow_offset = Vector2(2, 2)
-		lbl.label_settings = settings
-	else:
-		# Tylko update
-		lbl.label_settings.shadow_size = 8
-		lbl.label_settings.shadow_color = Color(0,0,0,0.6)
+	# if not lbl.label_settings:
+	# 	var settings = LabelSettings.new()
+	# 	settings.font_size = lbl.get_theme_font_size("font_size")
+	# 	if settings.font_size <= 0: settings.font_size = 24 # Fallback
+	# 	
+	# 	# Kolor bazowy (zachowaj istniejący jeśli nadpisany, inaczej biały)
+	# 	if lbl.has_theme_color_override("font_color"):
+	# 		settings.font_color = lbl.get_theme_color("font_color")
+	# 	else:
+	# 		settings.font_color = Color.WHITE
+	# 		
+	# 	settings.outline_size = 4
+	# 	settings.outline_color = Color.BLACK
+	# 	settings.shadow_size = 8
+	# 	settings.shadow_color = Color(0,0,0,0.6)
+	# 	settings.shadow_offset = Vector2(2, 2)
+	# 	lbl.label_settings = settings
+	# else:
+	# 	# Tylko update
+	# 	lbl.label_settings.shadow_size = 8
+	# 	lbl.label_settings.shadow_color = Color(0,0,0,0.6)
 # --- Final Round Handlers ---
 
 # --- Final Round Handlers ---

@@ -59,10 +59,11 @@ func start_round(question, round_idx):
 
 	_log_info("POJEDYNEK! Do tablicy: %s (A) vs %s (B). Oczekiwanie na żart..." % [str(faceoff_p1), str(faceoff_p2)])
 	
-	# WYŚLIJ TREŚĆ PYTANIA DO WSZYSTKICH (w tle, by zaktualizować DOM klienta)
+	# Usunięto wysyłanie treści pytania do klientów na prośbę użytkownika
+	# Pytanie nigdy nie wyświetla się na stronie
 	var question_msg = {
 		"type": "question",
-		"text": question["question"]
+		"text": "Patrz na ekran TV" # Komunikat zamiast pytania
 	}
 	for client_id in NetworkManager.get_connected_clients():
 		NetworkManager.send_to_client(client_id, question_msg)
@@ -96,9 +97,10 @@ func start_round(question, round_idx):
 		else:
 			NetworkManager.send_to_client(client_id, { "type": "set_screen", "screen": "wait", "msg": "Pojedynek: Gracz %s vs Gracz %s" % [p1_str, p2_str] })
 
-	# Delay for Question Reading (12s) - synchronizacja z GameUI
-	# W tym czasie buzzery są już aktywne
-	await get_tree().create_timer(12.0).timeout
+	# Delay for Question Reading (Sync with GameManager flow)
+	# GM waits 4s then reads question. Reading takes ~4-5s.
+	# Total ~8-9s before buzzers "officially" act (though code enables them early for twitch reflexes)
+	await get_tree().create_timer(9.0).timeout
 
 
 # Obsługa wciśnięcia buzera (wywoływana z GameManager)
@@ -230,6 +232,9 @@ func _handle_faceoff_answer(player_id, text, team_idx):
 			_log_info("[%s] TRAFIENIE! '%s' (+%d). Ale to nie TOP..." % [_get_team_name(team_idx), result["text"], points])
 			_log_info("Szansa dla przeciwnika na przebicie wyniku!")
 			
+			# TTS
+			emit_signal("round_message", "SZANSA_DLA_PRZECIWNIKA")
+			
 			if opponent_id != -1:
 				faceoff_active_player_id = opponent_id
 				var pid_client = NetworkManager.get_client_id(player_id)
@@ -307,6 +312,8 @@ func _win_faceoff(winner_player_id, winner_team_idx):
 	current_substate = RoundState.DECISION
 	_log_info("[%s] WYGRANY POJEDYNEK! Decyzja (Gracz %d): [G]RAMY czy [O]DDAJEMY?" % [_get_team_name(winner_team_idx), winner_player_id])
 	
+	emit_signal("round_message", "DECYZJA")
+	
 	var winner_client_id = NetworkManager.get_client_id(winner_player_id)
 	if winner_client_id != "":
 		NetworkManager.send_to_client(winner_client_id, { "type": "set_screen", "screen": "decision" })
@@ -323,6 +330,7 @@ func _handle_decision(player_id: int, text: String):
 		var team_name = _get_team_name(playing_team)
 		_log_info("[%s] Decyzja: GRAMY! Tablica należy do nas." % team_name)
 		emit_signal("decision_made", team_name, "GRAJĄ")
+		emit_signal("round_message", "START_TEAM_PLAY_AUTO")
 		_start_team_play_phase()
 	elif command == "ODDAJEMY" or command == "PASS" or command == "O":
 		playing_team = 1 if playing_team == 0 else 0
@@ -335,6 +343,7 @@ func _handle_decision(player_id: int, text: String):
 		
 		_log_info("[%s] Decyzja: ODDAJEMY! Tablica dla przeciwników (%s)." % [passing_team_name, _get_team_name(playing_team)])
 		emit_signal("decision_made", passing_team_name, "ODDAJĄ")
+		emit_signal("round_message", "ODDAJEMY")
 		_start_team_play_phase()
 
 
@@ -397,6 +406,9 @@ func _update_input_for_active_team_member():
 	
 	# 2. Wyślij WAIT do reszty
 	for client_id in NetworkManager.get_connected_clients():
+		# Upewnij się, że nie wyświetlamy pytania przy zmianie ekranów
+		NetworkManager.send_to_client(client_id, { "type": "question", "text": "Patrz na ekran TV" })
+		
 		if client_id != active_client_id:
 			var pid = NetworkManager.client_to_player_id.get(client_id, -1)
 			var team_idx = t_manager.get_player_team_index(pid)
@@ -515,6 +527,11 @@ func _process_steal_answer(text, team_idx):
 # Kończy rundę, dodaje zebrane punkty do wyniku zwycięskiej drużyny i prosi o zmianę stanu gry
 func _finish_round(winner_idx):
 	t_manager.add_score(winner_idx, round_bank)
+	
+	# Wyczyść ekrany graczy (usuń pytanie)
+	for client_id in NetworkManager.get_connected_clients():
+		NetworkManager.send_to_client(client_id, { "type": "set_screen", "screen": "wait", "msg": "Koniec rundy..." })
+	
 	await _reveal_missed_answers()
 	emit_signal("state_change_requested", "ROUND_END")
 
@@ -522,13 +539,21 @@ func _finish_round(winner_idx):
 func _reveal_missed_answers():
 	if current_question.has("answers"):
 		for ans in current_question["answers"]:
-			# Sprawdzamy czy odpowiedź została już odkryta
-			# WARNING: In production code, q_manager.get_revealed_answers should return a list of texts
-			# Here assuming simple logic for revealing misses.
-			# if not ans["text"] in q_manager.get_revealed_answers(current_question):
-				# emit_signal("answer_revealed", ans)
-				# await get_tree().create_timer(1.0).timeout # Małe opóźnienie dla efektu wizualnego
-			pass
+			# Jeśli odpowiedź nie została odkryta podczas gry
+			if not ans.get("revealed", false):
+				# Odkryj ją teraz
+				ans["revealed"] = true
+				emit_signal("answer_revealed", ans)
+				
+				# Dźwięk odkrywania (opcjonalnie inny niż sukces)
+				var gm = get_parent()
+				if gm and "SoundManager" in gm: 
+					# SoundManager is global usuallly, so SoundManager.play_sfx("ding")
+					pass
+				
+				SoundManager.play_sfx("ding") # Zakładamy że SoundManager jest globalnym singletonem
+				
+				await get_tree().create_timer(1.5).timeout
 
 
 # Zwraca czytelną nazwę drużyny (DRUŻYNA A/B) na podstawie indeksu
@@ -543,16 +568,17 @@ func _announce_answer_and_wait(text: String):
 	# Dostęp do TTS z GameManager (RoundManager jest dzieckiem GameManagera)
 	var gm = get_parent()
 	if gm and "tts_speak" in gm:
-		# Używamy tts_speak z GM lub bezpośrednio TTSManager
-		# gm.tts_speak("Odpowiedź: " + text, false) <- to by dodało "Pytanie:" itd.
-		# Lepiej bezpośrednio
-		if gm.tts_manager:
-			gm.tts_manager.speak(text, true) # true = głos gracza/lżejszy?
+		# "Sędzia sprawdza odpowiedź..." sends signal to GM which sends signal to UI
+		emit_signal("round_message", "Sędzia sprawdza odpowiedź:'" + text + "'")
 	
-	# Oczekiwanie na zakończenie czytania (szacunkowe)
-	# ZwiÄ™kszamy opÃ³Åºnienie dla lepszego efektu (user request: za szybko)
-	var wait_time = 2.0 + text.length() * 0.15
+	# Oczekiwanie na zakończenie czytania przez Hosta (ok 4-5 sekund)
+	# User request: "cała rozgrywka jest zdesynchronizowana"
+	# Host reads: "Odpowiedź: [TEXT]" which takes ~3s + buffer.
+	var wait_time = 4.0
 	await get_tree().create_timer(wait_time).timeout
 	
-	# Po przeczytaniu: pokaż odpowiedź nad tablicą
+	# Po przeczytaniu: pokaż odpowiedź nad tablicą ("Czytamy tablicę")
 	emit_signal("player_answer_display", text)
+	
+	# Dodatkowe opóźnienie na "Czy jest na tablicy?!" (suspense)
+	await get_tree().create_timer(2.0).timeout

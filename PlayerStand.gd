@@ -21,6 +21,9 @@ func _ready():
 	
 	# Ensure bubble is high z-index
 	bubble_root.z_index = 20
+	
+	# Enable autowrap for bubble text
+	bubble_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 func set_player_data(nick: String, avatar_texture: Texture2D):
 	nick_label.text = nick
@@ -58,6 +61,22 @@ func show_bubble(text: String, duration: float = 4.0):
 		bubble_root.scale = Vector2(0.1, 0.1) # Start small but not zero to avoid processing glitches
 	
 	bubble_root.pivot_offset = Vector2(bubble_root.size.x / 2, bubble_root.size.y)
+	
+	# Dynamic font size based on length
+	var f_size = 32
+	var t_len = text.length()
+	
+	if t_len > 100:
+		f_size = 16
+	elif t_len > 60:
+		f_size = 20
+	elif t_len > 40:
+		f_size = 24
+	elif t_len > 25:
+		f_size = 28
+		
+	bubble_label.add_theme_font_size_override("font_size", f_size)
+	bubble_label.add_theme_color_override("font_color", Color.BLACK)
 	
 	active_tween = create_tween()
 	active_tween.tween_property(bubble_root, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)

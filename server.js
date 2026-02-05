@@ -81,7 +81,8 @@ wss.on('connection', ws => {
                 clientId: ws.clientId,
                 team: data.team
             }));
-            ws.send(JSON.stringify({ type: 'team_confirmed', team: data.team }));
+            // REMOVED to allow changing teams indefinitely
+            // ws.send(JSON.stringify({ type: 'team_confirmed', team: data.team }));
             return;
         }
     });
