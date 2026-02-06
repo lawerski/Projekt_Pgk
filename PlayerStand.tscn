@@ -47,18 +47,6 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 0
 
-[node name="AvatarMargin" type="MarginContainer" parent="Frame/VBox"]
-layout_mode = 2
-size_flags_vertical = 3
-theme_override_constants/margin_left = 10
-theme_override_constants/margin_top = 10
-theme_override_constants/margin_right = 10
-theme_override_constants/margin_bottom = 10
-
-[node name="Head" type="TextureRect" parent="Frame/VBox/AvatarMargin"]
-layout_mode = 2
-expand_mode = 1
-stretch_mode = 5
 
 [node name="NamePanel" type="PanelContainer" parent="Frame/VBox"]
 custom_minimum_size = Vector2(0, 50)
@@ -73,6 +61,19 @@ text = "Nick"
 horizontal_alignment = 1
 vertical_alignment = 1
 text_overrun_behavior = 1
+
+[node name="AvatarMargin" type="MarginContainer" parent="Frame/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="Head" type="TextureRect" parent="Frame/VBox/AvatarMargin"]
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
 
 [node name="BubbleRoot" type="Control" parent="."]
 visible = false

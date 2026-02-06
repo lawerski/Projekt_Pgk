@@ -10,23 +10,25 @@ extends Control
 func _ready():
 	print("[Lobby] Init")
 	_setup_visuals()
-	
+	_setup_fade()
+	await _fade_in()
+
 	# Connect Button
 	start_button.pressed.connect(_on_start_game_pressed)
-	
+
 	# Network signals
 	if not NetworkManager.host_registered.is_connected(_on_host_registered):
 		NetworkManager.host_registered.connect(_on_host_registered)
-	
+
 	if not NetworkManager.player_joined.is_connected(_on_player_joined):
 		NetworkManager.player_joined.connect(_on_player_joined)
-	
+
 	if not NetworkManager.team_chosen.is_connected(_on_team_chosen):
 		NetworkManager.team_chosen.connect(_on_team_chosen)
-		
+
 	if not NetworkManager.team_name_received.is_connected(_on_team_name_received):
 		NetworkManager.team_name_received.connect(_on_team_name_received)
-		
+
 	if not NetworkManager.player_left.is_connected(_on_player_left):
 		NetworkManager.player_left.connect(_on_player_left)
 
@@ -36,6 +38,29 @@ func _ready():
 	else:
 		_on_host_registered(NetworkManager.room_code)
 		_update_list()
+
+func _setup_fade():
+	if not has_node("FadeRect"):
+		var fade = ColorRect.new()
+		fade.name = "FadeRect"
+		fade.color = Color(0,0,0,1)
+		fade.anchor_left = 0
+		fade.anchor_top = 0
+		fade.anchor_right = 1
+		fade.anchor_bottom = 1
+		fade.z_index = 100
+		add_child(fade)
+		fade.visible = true
+
+func _fade_in():
+	var fade = get_node("FadeRect")
+	if fade:
+		fade.visible = true
+		fade.modulate.a = 1.0
+		var tween = fade.create_tween()
+		tween.tween_property(fade, "modulate:a", 0.0, 0.7).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		await get_tree().create_timer(0.7).timeout
+		fade.visible = false
 
 func _on_host_registered(code):
 	room_code_label.text = str(code)
