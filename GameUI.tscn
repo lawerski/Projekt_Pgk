@@ -239,23 +239,28 @@ grow_vertical = 2
 theme_override_constants/separation = 150
 alignment = 1
 
-[node name="BoardArea" type="PanelContainer" parent="."]
+[node name="BoardArea" type="Panel" parent="."]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -450.0
+offset_left = -600.0
 offset_top = -420.0
-offset_right = 450.0
+offset_right = 600.0
 offset_bottom = 150.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_board_frame")
 
 [node name="BoardInner" type="Panel" parent="BoardArea"]
-layout_mode = 2
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_board_inner")
 
 [node name="VBox" type="VBoxContainer" parent="BoardArea/BoardInner"]
@@ -263,9 +268,9 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 20.0
+offset_left = 160.0
 offset_top = 20.0
-offset_right = -20.0
+offset_right = -160.0
 offset_bottom = -20.0
 grow_horizontal = 2
 grow_vertical = 2
@@ -291,6 +296,37 @@ text = "0"
 [node name="AnswerContainer" type="VBoxContainer" parent="BoardArea/BoardInner/VBox"]
 layout_mode = 2
 theme_override_constants/separation = 10
+
+[node name="StrikeLeft" type="Label" parent="BoardArea"]
+layout_mode = 1
+anchors_preset = 9
+anchor_bottom = 1.0
+offset_right = 100.0
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 0, 0, 1)
+theme_override_colors/font_outline_color = Color(1, 1, 1, 1)
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 100
+text = ""
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="StrikeRight" type="Label" parent="BoardArea"]
+layout_mode = 1
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -100.0
+grow_horizontal = 0
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 0, 0, 1)
+theme_override_colors/font_outline_color = Color(1, 1, 1, 1)
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 100
+text = ""
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="HostSpot" type="Control" parent="."]
 layout_mode = 1
@@ -390,6 +426,7 @@ text = "Drużyna A"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+
 [node name="ScorePanel" type="PanelContainer" parent="TeamStation_A/Desk"]
 layout_mode = 1
 anchors_preset = 5
@@ -408,6 +445,16 @@ theme_override_colors/font_color = Color(1, 0.8, 0, 1)
 theme_override_font_sizes/font_size = 40
 text = "0"
 horizontal_alignment = 1
+
+[node name="StrikeLabel" type="Label" parent="TeamStation_A/Desk/ScorePanel"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0, 0, 1)
+theme_override_font_sizes/font_size = 32
+text = ""
+horizontal_alignment = 2
+vertical_alignment = 1
+offset_left = 50.0
+offset_top = 0.0
 
 [node name="TeamStation_B" type="Control" parent="."]
 layout_mode = 1
@@ -477,6 +524,7 @@ text = "Drużyna B"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+
 [node name="ScorePanel" type="PanelContainer" parent="TeamStation_B/Desk"]
 layout_mode = 1
 anchors_preset = 5
@@ -495,6 +543,16 @@ theme_override_colors/font_color = Color(1, 0.8, 0, 1)
 theme_override_font_sizes/font_size = 40
 text = "0"
 horizontal_alignment = 1
+
+[node name="StrikeLabel" type="Label" parent="TeamStation_B/Desk/ScorePanel"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0, 0, 1)
+theme_override_font_sizes/font_size = 32
+text = ""
+horizontal_alignment = 2
+vertical_alignment = 1
+offset_left = 50.0
+offset_top = 0.0
 
 [node name="StrikeOverlay" type="CenterContainer" parent="."]
 visible = false

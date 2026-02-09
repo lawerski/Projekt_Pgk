@@ -1,5 +1,8 @@
 extends Control
 
+@onready var strike_left_label = $BoardArea/StrikeLeft
+@onready var strike_right_label = $BoardArea/StrikeRight
+
 @onready var game_manager = get_node("/root/Main/GameManager")
 @onready var round_manager = game_manager.get_node("RoundManager")
 
@@ -8,6 +11,8 @@ extends Control
 @onready var answers_vbox = $BoardArea/BoardInner/VBox/AnswerContainer
 @onready var score_a_label = $TeamStation_A/Desk/ScorePanel/Label
 @onready var score_b_label = $TeamStation_B/Desk/ScorePanel/Label
+@onready var strikes_a_label = $TeamStation_A/Desk/ScorePanel/StrikeLabel
+@onready var strikes_b_label = $TeamStation_B/Desk/ScorePanel/StrikeLabel
 @onready var name_a_label = $TeamStation_A/Desk/FrontPanel/NameLabel
 @onready var name_b_label = $TeamStation_B/Desk/FrontPanel/NameLabel
 @onready var round_score_label = $BoardArea/BoardInner/VBox/RoundScore/Score
@@ -30,10 +35,12 @@ var answer_row_scene = preload("res://AnswerRow.tscn")
 var player_stand_scene = preload("res://PlayerStand.tscn")
 var exit_dialog: ConfirmationDialog
 var temp_answer_label: Label
-
+var team_strikes := {0: 0, 1: 0}
 var host_jokes = [
+
 	"Jak szybko przemieszcza się burza? – Błyskawicznie!",
 	"Co mówi ksiądz po ślubie informatyka? – Pobieranie zakończone!",
+	# Ustal, która drużyna gra (pobierz z round_manager)
 	"Co robi chirurg w operze? – Operuje.",
 	"Co ile miesięcy chemik jeździ na wakacje? – CO2.",
 	"Na czym jeździ papier toaletowy? – Na rolkach.",
@@ -261,6 +268,11 @@ func _on_round_started(question_data):
 	if strike_overlay:
 		strike_overlay.visible = false
 	
+	if strike_left_label:
+		strike_left_label.text = ""
+	if strike_right_label:
+		strike_right_label.text = ""
+	
 	# Clear old answers
 	if answers_vbox:
 		for child in answers_vbox.get_children():
@@ -399,25 +411,43 @@ func _on_player_answer_display(text):
 func _on_strike(count):
 	strike_label.text = "X".repeat(count)
 	strike_overlay.visible = true
+	# Duże X po bokach tablicy - PIONOWO i dla właściwej drużyny!
 	
+	var x_vertical = ""
+	for i in range(count):
+		x_vertical += "X\n"
+	
+	# Determine which team is playing
+	var active_team = 0
+	if round_manager:
+		active_team = round_manager.playing_team
+		
+	if active_team == 0:
+		if strike_left_label:
+			strike_left_label.text = x_vertical
+		if strike_right_label:
+			strike_right_label.text = ""
+	else:
+		if strike_right_label:
+			strike_right_label.text = x_vertical
+		if strike_left_label:
+			strike_left_label.text = ""
+
 	# Play Sound
 	SoundManager.play_sfx("wrong")
-	
-	trigger_camera_shake(15.0) # <--- JUICE: CAMERA SHAKE ON ERROR
-	
-	# Visualize error on the answer label too
+	trigger_camera_shake(15.0)
 	if temp_answer_label:
-		temp_answer_label.add_theme_color_override("font_color", Color(1, 0, 0)) # Red
-	
-	# _host_speak(["Niestety nie...", "Pudło!", "Nie ma takiej odpowiedzi."].pick_random()) - Removed to avoid desync
-
-	# Play sound here if AudioStreamPlayer available
-	# WydÅ‚uÅ¼amy wyÅ›wietlanie 'X' (user request: za szybko)
+		temp_answer_label.add_theme_color_override("font_color", Color(1, 0, 0))
 	await get_tree().create_timer(3.0).timeout
 	strike_overlay.visible = false
+	# Side strikes persist
+	# if strike_left_label:
+	# 	strike_left_label.text = ""
+	# if strike_right_label:
+	# 	strike_right_label.text = ""
 	if temp_answer_label:
-		temp_answer_label.text = "" # Clear after strike animation
-		temp_answer_label.add_theme_color_override("font_color", Color(1, 1, 0)) # Reset to Yellow
+		temp_answer_label.text = ""
+		temp_answer_label.add_theme_color_override("font_color", Color(1, 1, 0))
 func _setup_visuals():
 	# 1. WorldEnvironment (Glow/Bloom)
 	var world_env = WorldEnvironment.new()
